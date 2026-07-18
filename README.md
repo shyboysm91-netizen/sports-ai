@@ -1,36 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sports AI KBO
 
-## Getting Started
+한국시간 기준 KBO 일정, 실제 예고 선발, 팀 순위·타격, 최근 10경기, 시즌 맞대결, 선발 상대 기록과 AI 승률·예상 스코어·언더오버를 한 화면에서 보여주는 Next.js 앱입니다.
 
-First, run the development server:
+## 실행
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 포함 기능
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- 한국시간 오늘/어제/내일 일정
+- 예고 선발 표시 및 미발표 처리
+- 팀 순위, 승률, 홈/원정 성적
+- 팀 타율, 출루율, 장타율, OPS, 홈런, 볼넷, 경기당 득점
+- 선발 시즌 ERA·승패·이닝·경기 수
+- 상대 팀전 이닝·실점·자책·ERA·WHIP·볼넷·탈삼진
+- 최근 10경기 흐름 및 경기 결과
+- 시즌 맞대결
+- AI 승리 확률, 예상 스코어, 8.5 기준 언더/오버, 분석 근거
+- 일부 외부 데이터가 실패해도 가능한 정보는 계속 표시
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> 외부 KBO/스포츠 데이터 페이지 구조가 변경되면 해당 API 파서 수정이 필요할 수 있습니다.

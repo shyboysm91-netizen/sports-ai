@@ -10,6 +10,10 @@ type KboGame = {
   away: string;
   home: string;
   stadium: string;
+  awayStarter: string;
+  homeStarter: string;
+  awayStarterCode: string;
+  homeStarterCode: string;
 };
 
 type KboResponse = {
@@ -259,6 +263,9 @@ export default function Home() {
                       <h3 className="mt-3 text-lg font-black md:text-xl">
                         {game.away}
                       </h3>
+                      <p className="mt-2 text-sm font-bold text-slate-400">
+                        선발 {game.awayStarter || "미정"}
+                      </p>
                     </div>
 
                     <span className="rounded-full border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-black text-slate-500">
@@ -271,6 +278,9 @@ export default function Home() {
                       <h3 className="mt-3 text-lg font-black md:text-xl">
                         {game.home}
                       </h3>
+                      <p className="mt-2 text-sm font-bold text-slate-400">
+                        선발 {game.homeStarter || "미정"}
+                      </p>
                     </div>
                   </div>
 
@@ -285,6 +295,10 @@ export default function Home() {
                           away: game.away,
                           home: game.home,
                           stadium: game.stadium,
+                          awayStarter: game.awayStarter,
+                          homeStarter: game.homeStarter,
+                          awayStarterCode: game.awayStarterCode,
+                          homeStarterCode: game.homeStarterCode,
                         },
                       }}
                       className="block w-full rounded-xl bg-blue-600 py-3.5 text-center text-sm font-black transition hover:bg-blue-500"

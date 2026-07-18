@@ -22,6 +22,12 @@ type TeamPitcher = {
   doubles: number;
   triples: number;
   homeRuns: number;
+  walks: number;
+  hitByPitch: number;
+  strikeouts: number;
+  runs: number;
+  earnedRuns: number;
+  whip: number;
 };
 
 const TEAM_NAMES: Record<string, string> = {
@@ -35,6 +41,20 @@ const TEAM_NAMES: Record<string, string> = {
   HANWHA: "한화 이글스",
   NC: "NC 다이노스",
   KIWOOM: "키움 히어로즈",
+};
+
+// KBO 공식 기록 사이트 내부 팀 코드
+const KBO_TEAM_IDS: Record<string, string> = {
+  KIA: "HT",
+  SAMSUNG: "SS",
+  LG: "LG",
+  DOOSAN: "OB",
+  KT: "KT",
+  SSG: "SK",
+  LOTTE: "LT",
+  HANWHA: "HH",
+  NC: "NC",
+  KIWOOM: "WO",
 };
 
 function cleanHtml(value: string) {
@@ -51,205 +71,168 @@ function cleanHtml(value: string) {
 }
 
 function parseNumber(value: string | undefined) {
-  if (!value || value === "-") {
-    return 0;
-  }
-
-  const number = Number(value.replace(/,/g, ""));
-
-  return Number.isFinite(number) ? number : 0;
+  if (!value || value === "-") return 0;
+  const parsed = Number(value.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function parseInnings(value: string | undefined) {
-  if (!value) {
-    return 0;
-  }
-
+  if (!value) return 0;
   const cleaned = value.trim();
-
-  if (cleaned.includes(" ")) {
-    const [wholePart, fractionPart] = cleaned.split(/\s+/);
-    const whole = Number(wholePart) || 0;
-
-    if (fractionPart === "1/3") {
-      return whole + 1 / 3;
-    }
-
-    if (fractionPart === "2/3") {
-      return whole + 2 / 3;
-    }
-
-    return whole;
-  }
-
-  if (cleaned === "1/3") {
-    return 1 / 3;
-  }
-
-  if (cleaned === "2/3") {
-    return 2 / 3;
-  }
-
+  const mixed = cleaned.match(/^(\d+)\s+(1\/3|2\/3)$/);
+  if (mixed) return Number(mixed[1]) + (mixed[2] === "1/3" ? 1 / 3 : 2 / 3);
+  if (cleaned === "1/3") return 1 / 3;
+  if (cleaned === "2/3") return 2 / 3;
   return Number(cleaned) || 0;
 }
 
-function getCellHtml(rowHtml: string) {
-  return rowHtml.match(/<td\b[^>]*>[\s\S]*?<\/td>/gi) ?? [];
+function getCells(row: string) {
+  return (row.match(/<td\b[^>]*>[\s\S]*?<\/td>/gi) ?? []).map((html) => ({
+    html,
+    text: cleanHtml(html),
+  }));
 }
 
-function getPcode(playerCellHtml: string) {
-  const match = playerCellHtml.match(/[?&]pcode=(\d+)/i);
-
-  return match?.[1] ?? "";
+function getPcode(html: string) {
+  return html.match(/[?&](?:playerId|pcode)=(\d+)/i)?.[1] ?? "";
 }
 
-async function loadTeamPitchers(teamCode: string) {
-  const url =
-    `https://eng.koreabaseball.com/Stats/PitchingByTeams.aspx` +
-    `?codeTeam=${encodeURIComponent(teamCode)}`;
+function normalizeName(value: string) {
+  return value.replace(/\s+/g, "").toLowerCase();
+}
 
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      Accept: "text/html",
-    },
-    next: {
-      revalidate: 1800,
-    },
-  });
+async function fetchPitcherPage(teamId: string) {
+  const urls = [
+    `https://www.koreabaseball.com/Record/Player/PitcherBasic/Basic1.aspx?teamId=${teamId}&pos=PO`,
+    `https://www.koreabaseball.com/Record/Player/PitcherBasic/Basic1.aspx?teamId=${teamId}`,
+  ];
 
-  if (!response.ok) {
-    throw new Error(
-      `${teamCode} 투수 기록 요청 실패: ${response.status}`,
-    );
+  let best = "";
+  for (const url of urls) {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "text/html,application/xhtml+xml",
+        Referer: "https://www.koreabaseball.com/Record/Player/PitcherBasic/Basic1.aspx",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) continue;
+    const html = await response.text();
+    if (html.length > best.length) best = html;
+    if (/playerId=\d+/i.test(html)) return html;
   }
+  return best;
+}
 
-  const html = await response.text();
-
-  const rows =
-    html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
-
+function parsePitchers(html: string, teamCode: string): TeamPitcher[] {
+  const rows = html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
   const pitchers: TeamPitcher[] = [];
   const seen = new Set<string>();
+  const expectedTeam = TEAM_NAMES[teamCode];
 
   for (const row of rows) {
-    const cellHtml = getCellHtml(row);
-    const cells = cellHtml.map(cleanHtml).filter(Boolean);
+    const cells = getCells(row);
+    if (cells.length < 10) continue;
 
-    if (cells.length < 18) {
+    const playerIndex = cells.findIndex((cell) => /[?&](?:playerId|pcode)=\d+/i.test(cell.html));
+    if (playerIndex < 0) continue;
+
+    const pcode = getPcode(cells[playerIndex].html);
+    const player = cells[playerIndex].text;
+    if (!pcode || !player || seen.has(pcode)) continue;
+
+    // KBO Basic1 표: 순위, 선수명, 팀명, ERA, G, W, L, SV, HLD, WPCT, IP, H, HR, BB, HBP, SO, R, ER, WHIP
+    const teamText = cells[playerIndex + 1]?.text ?? "";
+    const eraIndex = playerIndex + 2;
+    if (teamText && !normalizeName(expectedTeam).includes(normalizeName(teamText)) &&
+        !normalizeName(teamText).includes(normalizeName(expectedTeam).slice(0, 2))) {
       continue;
     }
 
-    const player = cells[0];
-    const rowTeamCode = cells[1]?.toUpperCase();
-    const eraText = cells[2];
-    const pcode = getPcode(cellHtml[0] ?? "");
+    const era = parseNumber(cells[eraIndex]?.text);
+    const games = parseNumber(cells[eraIndex + 1]?.text);
+    const wins = parseNumber(cells[eraIndex + 2]?.text);
+    const losses = parseNumber(cells[eraIndex + 3]?.text);
+    const saves = parseNumber(cells[eraIndex + 4]?.text);
+    const holds = parseNumber(cells[eraIndex + 5]?.text);
+    const winningPercentage = parseNumber(cells[eraIndex + 6]?.text);
+    const innings = cells[eraIndex + 7]?.text ?? "-";
+    const hits = parseNumber(cells[eraIndex + 8]?.text);
+    const homeRuns = parseNumber(cells[eraIndex + 9]?.text);
+    const walks = parseNumber(cells[eraIndex + 10]?.text);
+    const hitByPitch = parseNumber(cells[eraIndex + 11]?.text);
+    const strikeouts = parseNumber(cells[eraIndex + 12]?.text);
+    const runs = parseNumber(cells[eraIndex + 13]?.text);
+    const earnedRuns = parseNumber(cells[eraIndex + 14]?.text);
+    const whip = parseNumber(cells[eraIndex + 15]?.text);
 
-    if (
-      !player ||
-      !pcode ||
-      player.toUpperCase() === "PLAYER" ||
-      player.toUpperCase() === "TOTAL"
-    ) {
-      continue;
-    }
+    if (!games && !parseInnings(innings) && era === 0) continue;
 
-    if (rowTeamCode !== teamCode) {
-      continue;
-    }
-
-    if (!/^\d+(\.\d+)?$/.test(eraText ?? "")) {
-      continue;
-    }
-
-    const key = `${teamCode}-${pcode}`;
-
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-
+    seen.add(pcode);
     pitchers.push({
       pcode,
       player,
       teamCode,
-      team: TEAM_NAMES[teamCode],
-      era: parseNumber(cells[2]),
-      games: parseNumber(cells[3]),
-      completeGames: parseNumber(cells[4]),
-      shutouts: parseNumber(cells[5]),
-      wins: parseNumber(cells[6]),
-      losses: parseNumber(cells[7]),
-      saves: parseNumber(cells[8]),
-      holds: parseNumber(cells[9]),
-      winningPercentage: parseNumber(cells[10]),
-      plateAppearances: parseNumber(cells[11]),
-      pitches: parseNumber(cells[12]),
-      innings: cells[13] ?? "0",
-      inningsValue: parseInnings(cells[13]),
-      hits: parseNumber(cells[14]),
-      doubles: parseNumber(cells[15]),
-      triples: parseNumber(cells[16]),
-      homeRuns: parseNumber(cells[17]),
+      team: expectedTeam,
+      era,
+      games,
+      completeGames: 0,
+      shutouts: 0,
+      wins,
+      losses,
+      saves,
+      holds,
+      winningPercentage,
+      plateAppearances: 0,
+      pitches: 0,
+      innings,
+      inningsValue: parseInnings(innings),
+      hits,
+      doubles: 0,
+      triples: 0,
+      homeRuns,
+      walks,
+      hitByPitch,
+      strikeouts,
+      runs,
+      earnedRuns,
+      whip,
     });
   }
 
-  pitchers.sort((a, b) => {
-    if (b.inningsValue !== a.inningsValue) {
-      return b.inningsValue - a.inningsValue;
-    }
+  return pitchers.sort((a, b) => b.inningsValue - a.inningsValue || a.era - b.era);
+}
 
-    return a.era - b.era;
-  });
-
-  return pitchers;
+async function loadTeamPitchers(teamCode: string) {
+  const teamId = KBO_TEAM_IDS[teamCode];
+  const html = await fetchPitcherPage(teamId);
+  if (!html) throw new Error(`${TEAM_NAMES[teamCode]} 투수 기록 페이지를 받지 못했습니다.`);
+  return parsePitchers(html, teamCode);
 }
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-
-    const requestedTeam =
-      searchParams.get("team")?.toUpperCase() ?? "";
-
-    const teamCodes = requestedTeam
-      ? [requestedTeam]
-      : Object.keys(TEAM_NAMES);
+    const requestedTeam = searchParams.get("team")?.toUpperCase() ?? "";
+    const teamCodes = requestedTeam ? [requestedTeam] : Object.keys(TEAM_NAMES);
 
     for (const teamCode of teamCodes) {
       if (!TEAM_NAMES[teamCode]) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: `지원하지 않는 팀 코드입니다: ${teamCode}`,
-            pitchers: [],
-          },
-          { status: 400 },
-        );
+        return NextResponse.json({ success: false, message: `지원하지 않는 팀 코드입니다: ${teamCode}`, pitchers: [] }, { status: 400 });
       }
     }
 
-    const teamResults = await Promise.all(
-      teamCodes.map(async (teamCode) => ({
-        teamCode,
-        team: TEAM_NAMES[teamCode],
-        pitchers: await loadTeamPitchers(teamCode),
-      })),
-    );
-
-    const pitchers = teamResults.flatMap(
-      (result) => result.pitchers,
-    );
-
-    if (pitchers.length === 0) {
-      throw new Error("KBO 투수 기록을 분석하지 못했습니다.");
-    }
+    const teamResults = await Promise.all(teamCodes.map(async (teamCode) => ({
+      teamCode,
+      team: TEAM_NAMES[teamCode],
+      pitchers: await loadTeamPitchers(teamCode),
+    })));
+    const pitchers = teamResults.flatMap((result) => result.pitchers);
 
     return NextResponse.json({
       success: true,
-      source: "KBO official English pitching stats",
+      source: "KBO official Korean pitcher stats",
       updatedAt: new Date().toISOString(),
       teamCount: teamResults.length,
       pitcherCount: pitchers.length,
@@ -258,18 +241,10 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error("KBO 투수 기록 오류:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          error instanceof Error
-            ? error.message
-            : "KBO 투수 기록을 불러오지 못했습니다.",
-        teams: [],
-        pitchers: [],
-      },
-      { status: 500 },
-    );
+    return NextResponse.json({
+      success: false,
+      message: error instanceof Error ? error.message : "KBO 투수 기록을 불러오지 못했습니다.",
+      pitchers: [],
+    }, { status: 500 });
   }
 }
