@@ -135,40 +135,15 @@ type TeamFormResponse = {
   message?: string;
 };
 
-type SplitPitchingStats = {
-  label: string;
+type VenuePitchingStats = {
+  venue: string;
   games: number;
-  era: number;
   wins: number;
   losses: number;
-  saves: number;
-  holds: number;
   winningPercentage: number;
-  battersFaced: number;
   innings: string;
-  inningsValue: number;
-  hits: number;
-  homeRuns: number;
-  walks: number;
-  hitByPitch: number;
-  strikeouts: number;
-  runs: number;
-  earnedRuns: number;
-  opponentAverage: number;
+  era: number;
   whip: number;
-};
-
-type VenuePitchingStats = SplitPitchingStats & {
-  venue: string;
-};
-
-type PitchingSplits = {
-  venue: VenuePitchingStats[];
-  month: SplitPitchingStats[];
-  weekday: SplitPitchingStats[];
-  homeAway: SplitPitchingStats[];
-  dayNight: SplitPitchingStats[];
-  period: SplitPitchingStats[];
 };
 type RecentPitchingSummary = {
   games: number;
@@ -189,14 +164,7 @@ type PitcherVsTeamResponse = {
   stats: OpponentPitchingStats | null;
   stadium?: string;
   venueStats?: VenuePitchingStats[];
-  stadium?: string;
-  stadium?: string;
   currentVenueStats?: VenuePitchingStats | null;
-  splits?: PitchingSplits;
-  currentMonthStats?: SplitPitchingStats | null;
-  currentWeekdayStats?: SplitPitchingStats | null;
-  currentHomeAwayStats?: SplitPitchingStats | null;
-  currentDayNightStats?: SplitPitchingStats | null;
   recent5?: RecentPitchingSummary | null;
   recent10?: RecentPitchingSummary | null;
   seasonStats?: {
@@ -206,9 +174,6 @@ type PitcherVsTeamResponse = {
     innings: string;
     era: number;
     whip: number;
-    walks?: number;
-    strikeouts?: number;
-    homeRuns?: number;
   } | null;
   message?: string;
 };
@@ -238,7 +203,6 @@ type Prediction = {
   homeScore: number;
   totalLine: number;
   totalPick: "오버" | "언더";
-  expectedTotal: number;
   winner: string;
   confidence: number;
   confidenceGrade: "A" | "B" | "C";
@@ -336,43 +300,23 @@ function makePrediction({
     (5.0 - awayVsEra) * 0.16 +
     Math.max(-0.4, homeRunDiff * 0.08) +
     0.15;
+  let awayScore = clamp(Math.round(awayScoreRaw), 1, 10);
+  let homeScore = clamp(Math.round(homeScoreRaw), 1, 10);
   const winner = homeProb >= awayProb ? homeName : awayName;
 
-  // 반올림 전 예상 득점 합계는 언더/오버 판단용으로 따로 보존합니다.
-  // 표시 스코어의 점수 차는 승률 차와 원래 득점 차를 함께 반영합니다.
-  const expectedTotal = Math.round((awayScoreRaw + homeScoreRaw) * 10) / 10;
-  const probabilityGap = Math.abs(homeProb - awayProb);
-  const rawScoreGap = Math.abs(homeScoreRaw - awayScoreRaw);
-  const targetMargin = clamp(
-    Math.round(probabilityGap * 10 + rawScoreGap * 0.55),
-    1,
-    5,
-  );
-  const displayedTotal = clamp(Math.round(expectedTotal), 3, 20);
-
-  let winnerScore = Math.round((displayedTotal + targetMargin) / 2);
-  let loserScore = displayedTotal - winnerScore;
-
-  if (loserScore < 1) {
-    loserScore = 1;
-    winnerScore = Math.min(10, Math.max(2, displayedTotal - loserScore));
-  }
-
-  winnerScore = clamp(winnerScore, 2, 10);
-  loserScore = clamp(loserScore, 1, 9);
-
-  let awayScore = winner === awayName ? winnerScore : loserScore;
-  let homeScore = winner === homeName ? winnerScore : loserScore;
-
-  // 반올림 과정에서 추천 팀이 뒤집히는 경우만 최소한으로 보정합니다.
+  // 승리 확률과 예상 스코어가 서로 모순되지 않도록 보정합니다.
+  // KBO는 무승부가 가능하지만, 이 카드는 최종 승리팀 예측을 보여주므로
+  // 추천 팀이 반드시 1점 이상 앞선 스코어로 표시됩니다.
   if (winner === homeName && homeScore <= awayScore) {
-    homeScore = Math.min(10, awayScore + 1);
+    homeScore = awayScore < 10 ? awayScore + 1 : 10;
+    if (homeScore === awayScore) awayScore = Math.max(1, homeScore - 1);
   } else if (winner === awayName && awayScore <= homeScore) {
-    awayScore = Math.min(10, homeScore + 1);
+    awayScore = homeScore < 10 ? homeScore + 1 : 10;
+    if (awayScore === homeScore) homeScore = Math.max(1, awayScore - 1);
   }
 
   const totalLine = 0;
-  const totalPick = expectedTotal >= 9 ? "오버" : "언더";
+  const totalPick = awayScore + homeScore >= 9 ? "오버" : "언더";
 
   const signals = [
     Math.sign(homeSeason - awaySeason),
@@ -452,8 +396,9 @@ function makePrediction({
     );
   }
 
+  const total = awayScore + homeScore;
   reasons.push(
-    `화면에 표시된 예상 스코어의 합계는 ${awayScore + homeScore}점입니다. 실제 언더오버 추천은 내부 예상치와 시장 기준점을 비교해 최소 1점 이상 차이가 날 때만 판단합니다.`,
+    `예상 총점은 ${total}점입니다. 실제 언더오버 추천은 베트맨 기준점과 최소 1점 이상 차이가 날 때만 강하게 판단해야 합니다.`,
   );
   if (agreement < 0.67)
     reasons.push(
@@ -509,7 +454,6 @@ function makePrediction({
     homeScore,
     totalLine,
     totalPick,
-    expectedTotal,
     winner,
     confidence,
     confidenceGrade,
@@ -662,8 +606,7 @@ function AdvancedAnalysisSection({
     marketAway == null ? null : prediction.awayWinProbability - marketAway;
   const homeGap =
     marketHome == null ? null : prediction.homeWinProbability - marketHome;
-  const predictedTotal = prediction.expectedTotal;
-  const displayedPredictedTotal = prediction.awayScore + prediction.homeScore;
+  const predictedTotal = prediction.awayScore + prediction.homeScore;
   const totalPick = total
     ? predictedTotal >= total.line + 1
       ? "오버"
@@ -681,46 +624,18 @@ function AdvancedAnalysisSection({
         : home;
   const weekdayAway = awayForm?.weekday?.summary,
     weekdayHome = homeForm?.weekday?.summary;
-  const rawWeekdayLabel =
+  const weekdayLabel =
     awayForm?.weekday?.label || homeForm?.weekday?.label || "해당 요일";
-  const weekdayNameMap: Record<string, string> = {
-    월: "월요일",
-    화: "화요일",
-    수: "수요일",
-    목: "목요일",
-    금: "금요일",
-    토: "토요일",
-    일: "일요일",
-    월요일: "월요일",
-    화요일: "화요일",
-    수요일: "수요일",
-    목요일: "목요일",
-    금요일: "금요일",
-    토요일: "토요일",
-    일요일: "일요일",
-  };
-  const weekdayLabel = weekdayNameMap[rawWeekdayLabel] || rawWeekdayLabel;
   const awayWeekRate = weekdayAway?.games
     ? (weekdayAway.wins / weekdayAway.games) * 100
     : null;
   const homeWeekRate = weekdayHome?.games
     ? (weekdayHome.wins / weekdayHome.games) * 100
     : null;
-  const selectedAiRate =
-    aiTeam === away
-      ? prediction.awayWinProbability
-      : aiTeam === home
-        ? prediction.homeWinProbability
-        : null;
-  const selectedMarketRate =
-    aiTeam === away ? marketAway : aiTeam === home ? marketHome : null;
   const marketSentence =
-    bestGap == null ||
-    aiTeam == null ||
-    selectedAiRate == null ||
-    selectedMarketRate == null
-      ? "현재 배당 정보를 불러오지 못해 AI 예상 승률과 배당을 비교하지 않았습니다."
-      : `현재 배당은 ${aiTeam}의 승리 가능성을 약 ${selectedMarketRate.toFixed(1)}%로 보고 있습니다. SPORTS AI는 ${selectedAiRate.toFixed(1)}%로 분석했습니다. AI가 배당보다 약 ${Math.abs(bestGap).toFixed(1)}% 더 높게 평가해 ${aiTeam} 승 쪽을 우선 검토했습니다.`;
+    bestGap == null
+      ? "현재 배당을 불러오지 못해 AI 예상 승률과 배당 기준 승률 비교는 제외했습니다."
+      : `${aiTeam}의 AI 예상 승률은 배당 기준 승률보다 ${Math.abs(bestGap).toFixed(1)}%p ${bestGap >= 0 ? "높습니다" : "낮습니다"}.`;
   const weekdaySentence =
     awayWeekRate == null || homeWeekRate == null
       ? `${weekdayLabel} 경기 표본이 부족해 핵심 근거에서는 제외했습니다.`
@@ -787,9 +702,21 @@ function AdvancedAnalysisSection({
             </p>
             <p className="mt-1 text-xs text-slate-500">
               언더 {total?.under?.toFixed(2) ?? "-"} · 오버{" "}
-              {total?.over?.toFixed(2) ?? "-"} · AI {displayedPredictedTotal}점
+              {total?.over?.toFixed(2) ?? "-"} · AI {predictedTotal}점
             </p>
           </div>
+        </div>
+        <div className="mt-4 rounded-2xl border border-amber-900/70 bg-slate-950 p-5">
+          <p className="text-xs text-slate-500">동일 배당 구간 실제 기록</p>
+          <p className="mt-2 font-black">
+            {sameOdds && sameOdds.games > 0
+              ? `${sameOdds.range} · ${sameOdds.games}경기 ${sameOdds.wins}승 ${sameOdds.losses}패 · 실제 승률 ${sameOdds.rate.toFixed(1)}%`
+              : "동일 배당 기록 누적 중"}
+          </p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            현재 브라우저에서 자동 수집한 실제 경기 결과 기준입니다. 표본 수가
+            적으면 참고용으로만 표시됩니다.
+          </p>
         </div>
       </div>
 
@@ -838,8 +765,6 @@ function PredictionSection({
   away: string;
   home: string;
 }) {
-  const displayedPredictedTotal = prediction.awayScore + prediction.homeScore;
-
   return (
     <section className="mt-10 rounded-3xl border border-blue-800 bg-gradient-to-br from-blue-950/50 to-slate-900 p-6 md:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -887,12 +812,12 @@ function PredictionSection({
           </p>
         </div>
         <div className="rounded-2xl bg-slate-950 p-5 text-center">
-          <p className="text-xs text-slate-500">AI 예상 총점</p>
+          <p className="text-xs text-slate-500">언더/오버</p>
           <p className="mt-3 text-3xl font-black text-blue-400">
-            {displayedPredictedTotal}점
+            {prediction.awayScore + prediction.homeScore}점
           </p>
           <p className="mt-2 text-xs text-slate-500">
-            실제 언더/오버 추천은 아래 시장 기준점과 비교
+            AI 예상 총득점 · 시장 기준점은 아래에서 비교
           </p>
         </div>
       </div>
@@ -954,11 +879,6 @@ type StarterData = {
   koreanName: string;
   opponentStats: OpponentPitchingStats | null;
   currentVenueStats?: VenuePitchingStats | null;
-  splits?: PitchingSplits;
-  currentMonthStats?: SplitPitchingStats | null;
-  currentWeekdayStats?: SplitPitchingStats | null;
-  currentHomeAwayStats?: SplitPitchingStats | null;
-  currentDayNightStats?: SplitPitchingStats | null;
   recent5?: RecentPitchingSummary | null;
   recent10?: RecentPitchingSummary | null;
   seasonStats?: {
@@ -968,9 +888,6 @@ type StarterData = {
     innings: string;
     era: number;
     whip: number;
-    walks?: number;
-    strikeouts?: number;
-    homeRuns?: number;
   } | null;
 };
 
@@ -1234,99 +1151,6 @@ function TeamBattingComparison({
   );
 }
 
-
-function SplitSummaryCard({
-  title,
-  stats,
-}: {
-  title: string;
-  stats?: SplitPitchingStats | null;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-      <p className="text-xs font-black text-blue-400">{title}</p>
-      {!stats ? (
-        <p className="mt-3 text-sm text-slate-500">기록 없음</p>
-      ) : (
-        <div className="mt-3 space-y-2 text-sm">
-          <p className="font-black">
-            {(["월", "화", "수", "목", "금", "토", "일"].includes(stats.label)
-              ? `${stats.label}요일`
-              : stats.label === "방문"
-                ? "원정"
-                : stats.label)}{" "}
-            · {stats.games}경기 · {stats.wins}승 {stats.losses}패
-          </p>
-          <p>
-            ERA {formatEra(stats.era)} · WHIP{" "}
-            {stats.whip > 0 ? stats.whip.toFixed(2) : "-"}
-          </p>
-          <p className="text-slate-400">
-            {stats.innings}이닝 · 볼넷 {stats.walks} · 탈삼진 {stats.strikeouts}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SplitTable({
-  title,
-  rows,
-}: {
-  title: string;
-  rows?: SplitPitchingStats[];
-}) {
-  if (!rows?.length) return null;
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
-      <div className="border-b border-slate-800 px-4 py-3">
-        <p className="text-sm font-black text-blue-400">{title}</p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-[720px] w-full text-sm">
-          <thead className="bg-slate-900 text-xs text-slate-500">
-            <tr>
-              <th className="px-3 py-3 text-left">구분</th>
-              <th className="px-3 py-3 text-right">G</th>
-              <th className="px-3 py-3 text-right">승-패</th>
-              <th className="px-3 py-3 text-right">이닝</th>
-              <th className="px-3 py-3 text-right">ERA</th>
-              <th className="px-3 py-3 text-right">WHIP</th>
-              <th className="px-3 py-3 text-right">BB</th>
-              <th className="px-3 py-3 text-right">SO</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, index) => (
-              <tr
-                key={`${title}-${row.label}-${index}`}
-                className="border-t border-slate-800 first:border-t-0"
-              >
-                <td className="px-3 py-3 font-black">{row.label}</td>
-                <td className="px-3 py-3 text-right">{row.games}</td>
-                <td className="px-3 py-3 text-right">
-                  {row.wins}-{row.losses}
-                </td>
-                <td className="px-3 py-3 text-right">{row.innings}</td>
-                <td className="px-3 py-3 text-right font-black">
-                  {formatEra(row.era)}
-                </td>
-                <td className="px-3 py-3 text-right">
-                  {row.whip > 0 ? row.whip.toFixed(2) : "-"}
-                </td>
-                <td className="px-3 py-3 text-right">{row.walks}</td>
-                <td className="px-3 py-3 text-right">{row.strikeouts}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function StarterCard({
   teamName,
   starter,
@@ -1524,7 +1348,7 @@ function StarterCard({
             </div>
             <div className="rounded-xl border border-slate-700 bg-slate-950 p-4">
               <p className="text-sm font-black text-blue-400">
-                {starter.stadium || stadium || "오늘 구장"} 성적
+                {stadium || "오늘 구장"} 성적
               </p>
               {starter.currentVenueStats ? (
                 <div className="mt-3 space-y-2 text-sm">
@@ -1555,39 +1379,6 @@ function StarterCard({
               )}
             </div>
           </div>
-
-          <div className="mt-6">
-            <p className="text-sm font-black text-blue-400">오늘 경기 조건별 성적</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <SplitSummaryCard
-                title="이번 달"
-                stats={starter.currentMonthStats}
-              />
-              <SplitSummaryCard
-                title="오늘 요일"
-                stats={starter.currentWeekdayStats}
-              />
-              <SplitSummaryCard
-                title="홈 / 원정"
-                stats={starter.currentHomeAwayStats}
-              />
-            </div>
-          </div>
-
-          {starter.splits && (
-            <details className="mt-6 rounded-xl border border-slate-800 bg-slate-950">
-              <summary className="cursor-pointer px-4 py-4 font-black text-blue-400">
-                구장별 · 월별 · 요일별 · 홈/원정별 · 기간별 전체 기록 보기
-              </summary>
-              <div className="space-y-4 border-t border-slate-800 p-4">
-                <SplitTable title="구장별" rows={starter.splits.venue} />
-                <SplitTable title="월별" rows={starter.splits.month} />
-                <SplitTable title="요일별" rows={starter.splits.weekday} />
-                <SplitTable title="홈 / 원정별" rows={starter.splits.homeAway} />
-                <SplitTable title="기간별" rows={starter.splits.period} />
-              </div>
-            </details>
-          )}
         </>
       )}
     </article>
@@ -2031,7 +1822,7 @@ function GameDetailContent() {
         if (awayPitcher) {
           opponentRequests.push(
             fetch(
-              `/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(awayPitcher.pcode || "")}&name=${encodeURIComponent(awayStarterName || awayPitcher.player)}&opponent=${encodeURIComponent(homeCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(awayCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=away&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`,
+              `/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(awayPitcher.pcode || "")}&name=${encodeURIComponent(awayStarterName || awayPitcher.player)}&opponent=${encodeURIComponent(homeCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(awayCode)}`,
               { cache: "no-store", signal: controller.signal },
             ),
           );
@@ -2039,7 +1830,7 @@ function GameDetailContent() {
         if (homePitcher) {
           opponentRequests.push(
             fetch(
-              `/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(homePitcher.pcode || "")}&name=${encodeURIComponent(homeStarterName || homePitcher.player)}&opponent=${encodeURIComponent(awayCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(homeCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=home&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`,
+              `/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(homePitcher.pcode || "")}&name=${encodeURIComponent(homeStarterName || homePitcher.player)}&opponent=${encodeURIComponent(awayCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(homeCode)}`,
               { cache: "no-store", signal: controller.signal },
             ),
           );
@@ -2068,22 +1859,12 @@ function GameDetailContent() {
                     Number.parseFloat(awaySeason.innings) ||
                     awayPitcher.inningsValue,
                   era: awaySeason.era,
-                  whip: awaySeason.whip,
-                  walks: awaySeason.walks ?? awayPitcher.walks,
-                  strikeouts: awaySeason.strikeouts ?? awayPitcher.strikeouts,
-                  homeRuns: awaySeason.homeRuns ?? awayPitcher.homeRuns,
                 }
               : awayPitcher,
             koreanName:
               awayStarterName || data?.playerName || awayPitcher.player,
             opponentStats: data?.found ? data.stats : null,
-            stadium: data?.stadium || stadium,
             currentVenueStats: data?.currentVenueStats ?? null,
-            splits: data?.splits,
-            currentMonthStats: data?.currentMonthStats ?? null,
-            currentWeekdayStats: data?.currentWeekdayStats ?? null,
-            currentHomeAwayStats: data?.currentHomeAwayStats ?? null,
-            currentDayNightStats: data?.currentDayNightStats ?? null,
             recent5: data?.recent5 ?? null,
             recent10: data?.recent10 ?? null,
           });
@@ -2109,22 +1890,12 @@ function GameDetailContent() {
                     Number.parseFloat(homeSeason.innings) ||
                     homePitcher.inningsValue,
                   era: homeSeason.era,
-                  whip: homeSeason.whip,
-                  walks: homeSeason.walks ?? homePitcher.walks,
-                  strikeouts: homeSeason.strikeouts ?? homePitcher.strikeouts,
-                  homeRuns: homeSeason.homeRuns ?? homePitcher.homeRuns,
                 }
               : homePitcher,
             koreanName:
               homeStarterName || data?.playerName || homePitcher.player,
             opponentStats: data?.found ? data.stats : null,
-            stadium: data?.stadium || stadium,
             currentVenueStats: data?.currentVenueStats ?? null,
-            splits: data?.splits,
-            currentMonthStats: data?.currentMonthStats ?? null,
-            currentWeekdayStats: data?.currentWeekdayStats ?? null,
-            currentHomeAwayStats: data?.currentHomeAwayStats ?? null,
-            currentDayNightStats: data?.currentDayNightStats ?? null,
             recent5: data?.recent5 ?? null,
             recent10: data?.recent10 ?? null,
           });
