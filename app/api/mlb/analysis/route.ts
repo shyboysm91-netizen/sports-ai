@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { MLB_TEAM_KO_BY_ID, playerNameKo, teamNameKo } from "../../../lib/mlb-ko";
 
 type AnyObject = Record<string, any>;
@@ -9,7 +9,7 @@ function koreaDate(d: Date) { return new Intl.DateTimeFormat("en-CA", { timeZone
 function shiftDate(date: string, days: number) { const d = new Date(`${date}T12:00:00+09:00`); d.setDate(d.getDate()+days); return koreaDate(d); }
 async function getJson(url: string) {
   const r = await fetch(url, { headers:{Accept:"application/json","User-Agent":"Sports-AI/3.0"}, next:{revalidate:300} });
-  if (!r.ok) throw new Error(`MLB 데이터 요청 실패 (${r.status})`);
+  if (!r.ok) throw new Error(`MLB ?곗씠???붿껌 ?ㅽ뙣 (${r.status})`);
   return r.json();
 }
 
@@ -65,10 +65,10 @@ async function pitcherStats(playerId: number, season: string, opponentId: number
   }));
   const homeRows = logs.filter((x:AnyObject)=>x.isHome);
   const awayRows = logs.filter((x:AnyObject)=>!x.isHome);
-  const opponentKo = MLB_TEAM_KO_BY_ID[opponentId] ?? "상대팀";
+  const opponentKo = MLB_TEAM_KO_BY_ID[opponentId] ?? "?곷??";
   const opponentRows = logs.filter((x:AnyObject)=>x.opponent===opponentKo);
   return {
-    id:playerId, name:playerNameKo(p.fullName ?? ""), originalName:p.fullName ?? "", throws:p.pitchHand?.description === "Right" ? "우투" : p.pitchHand?.description === "Left" ? "좌투" : "",
+    id:playerId, name:playerNameKo(p.fullName ?? ""), originalName:p.fullName ?? "", throws:p.pitchHand?.description === "Right" ? "?고닾" : p.pitchHand?.description === "Left" ? "醫뚰닾" : "",
     season:{ games:num(seasonStat.gamesPlayed), gamesStarted:num(seasonStat.gamesStarted), wins:num(seasonStat.wins), losses:num(seasonStat.losses), era:text(seasonStat.era)||"-", whip:text(seasonStat.whip)||"-", innings:text(seasonStat.inningsPitched)||"-", walks:num(seasonStat.baseOnBalls), strikeouts:num(seasonStat.strikeOuts), hits:num(seasonStat.hits), homeRuns:num(seasonStat.homeRuns) },
     recent5: summary(logs.slice(0,5)), recent10Summary: summary(logs), homeSummary:summary(homeRows), awaySummary:summary(awayRows), opponentSummary:summary(opponentRows), recent10:logs
   };
@@ -82,7 +82,7 @@ async function recentGames(teamId:number, date:string) {
     const isHome=g.teams?.home?.team?.id===teamId;
     const own=isHome?g.teams?.home:g.teams?.away; const opp=isHome?g.teams?.away:g.teams?.home;
     const ownScore=num(own?.score), oppScore=num(opp?.score);
-    return { date:(g.officialDate??""), opponent:teamNameKo(opp?.team?.name??"",opp?.team?.id), home:isHome, runs:ownScore, allowed:oppScore, result:ownScore>oppScore?"승":ownScore<oppScore?"패":"무", gamePk:g.gamePk };
+    return { date:(g.officialDate??""), opponent:teamNameKo(opp?.team?.name??"",opp?.team?.id), home:isHome, runs:ownScore, allowed:oppScore, result:ownScore>oppScore?"??:ownScore<oppScore?"??:"臾?, gamePk:g.gamePk };
   });
 }
 
@@ -115,17 +115,18 @@ async function bullpen(teamId:number,date:string) {
   const consecutive=[...datesByPitcher.entries()].filter(([,s])=>s.size>=2).map(([name])=>name);
   const heavy=latestLines.filter(x=>x.pitches>=25).map(x=>x.name);
   const score=Math.min(100,Math.round(yesterdayPitches*.65+(totalPitches-yesterdayPitches)*.25+consecutive.length*13+heavy.length*8));
-  return {score,label:score>=75?"매우 높음":score>=50?"높음":score>=25?"보통":"낮음",latestGameDate:latest??null,yesterdayPitches,recent3GamePitches:totalPitches,consecutivePitchers:consecutive.length,consecutiveNames:consecutive,heavyPitchers:heavy.length,heavyNames:heavy,pitchers:latestLines,recent3Days:targets.map(g=>({date:g.date,pitchers:lines.filter(x=>x.date===g.date)}))};
+  return {score,label:score>=75?"留ㅼ슦 ?믪쓬":score>=50?"?믪쓬":score>=25?"蹂댄넻":"??쓬",latestGameDate:latest??null,yesterdayPitches,recent3GamePitches:totalPitches,consecutivePitchers:consecutive.length,consecutiveNames:consecutive,heavyPitchers:heavy.length,heavyNames:heavy,pitchers:latestLines,recent3Days:targets.map((g: any)=>({date:g.date,pitchers:lines.filter(x=>x.date===g.date)}))};
 }
 
 export async function GET(request:Request){
   const p=new URL(request.url).searchParams; const date=p.get("date")??koreaDate(new Date()); const season=date.slice(0,4);
   const awayId=num(p.get("awayTeamId")), homeId=num(p.get("homeTeamId")); const awayStarterId=num(p.get("awayStarterId")), homeStarterId=num(p.get("homeStarterId"));
-  if(!awayId||!homeId) return NextResponse.json({success:false,message:"팀 정보가 필요합니다."},{status:400});
+  if(!awayId||!homeId) return NextResponse.json({success:false,message:"? ?뺣낫媛 ?꾩슂?⑸땲??"},{status:400});
   try{
     const [awayTeam,homeTeam,awayPitcher,homePitcher,awayRecent,homeRecent,h2h,awayBullpen,homeBullpen]=await Promise.all([
       teamStats(awayId,season),teamStats(homeId,season),pitcherStats(awayStarterId,season,homeId),pitcherStats(homeStarterId,season,awayId),recentGames(awayId,date),recentGames(homeId,date),headToHead(awayId,homeId,season,date),bullpen(awayId,date),bullpen(homeId,date)
     ]);
     return NextResponse.json({success:true,updatedAt:new Date().toISOString(),awayTeam,homeTeam,awayPitcher,homePitcher,awayRecent,homeRecent,headToHead:h2h,awayBullpen,homeBullpen});
-  }catch(error){ return NextResponse.json({success:false,message:error instanceof Error?error.message:"MLB 상세 분석을 불러오지 못했습니다."},{status:500}); }
+  }catch(error){ return NextResponse.json({success:false,message:error instanceof Error?error.message:"MLB ?곸꽭 遺꾩꽍??遺덈윭?ㅼ? 紐삵뻽?듬땲??"},{status:500}); }
 }
+
