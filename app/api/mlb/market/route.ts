@@ -556,8 +556,6 @@ export async function GET(req: Request) {
       lastUpdate: consensus.lastUpdate,
       commenceTime: event.commence_time,
       marketState,
-      actualAway: awayApi,
-      actualHome: homeApi,
       matchMode,
       remaining,
       used,

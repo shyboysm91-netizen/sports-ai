@@ -190,8 +190,7 @@ type PitcherVsTeamResponse = {
   stats: OpponentPitchingStats | null;
   stadium?: string;
   venueStats?: VenuePitchingStats[];
-  stadium?: string;
-  stadium?: string;
+  
   currentVenueStats?: VenuePitchingStats | null;
   splits?: PitchingSplits;
   currentMonthStats?: SplitPitchingStats | null;
@@ -1140,6 +1139,7 @@ type StarterData = {
   pitcher: TeamPitcher;
   koreanName: string;
   opponentStats: OpponentPitchingStats | null;
+    stadium?: string;
   currentVenueStats?: VenuePitchingStats | null;
   splits?: PitchingSplits;
   currentMonthStats?: SplitPitchingStats | null;

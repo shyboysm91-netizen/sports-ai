@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { MLB_TEAM_KO_BY_ID, playerNameKo, teamNameKo } from "../../../lib/mlb-ko";
 
 type AnyObject = Record<string, any>;
@@ -82,7 +82,7 @@ async function recentGames(teamId:number, date:string) {
     const isHome=g.teams?.home?.team?.id===teamId;
     const own=isHome?g.teams?.home:g.teams?.away; const opp=isHome?g.teams?.away:g.teams?.home;
     const ownScore=num(own?.score), oppScore=num(opp?.score);
-    return { date:(g.officialDate??""), opponent:teamNameKo(opp?.team?.name??"",opp?.team?.id), home:isHome, runs:ownScore, allowed:oppScore, result:ownScore>oppScore?"??:ownScore<oppScore?"??:"臾?, gamePk:g.gamePk };
+    return { date:(g.officialDate??""), opponent:teamNameKo(opp?.team?.name??"",opp?.team?.id), home:isHome, runs:ownScore, allowed:oppScore, result:ownScore>oppScore?"승":ownScore<oppScore?"패":"무", gamePk:g.gamePk };
   });
 }
 
