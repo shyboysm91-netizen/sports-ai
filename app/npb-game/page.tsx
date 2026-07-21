@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { dataCacheUrl } from "../lib/client-data-cache";
 
 function Card({
   title,
@@ -551,13 +552,13 @@ function Content() {
 
         const [analysisResponse, awayRecentResponse, homeRecentResponse, headToHeadResponse, marketResponse, weatherResponse, scheduleResponse] =
           await Promise.all([
-            fetch(`/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}`, baseOptions),
-            fetch(`/api/npb/recent-games-v2?team=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, baseOptions),
-            fetch(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&limit=10`, baseOptions),
-            fetch(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, baseOptions),
-            fetch(`/api/npb/market?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}`, baseOptions),
-            fetch(`/api/npb/weather?stadium=${encodeURIComponent(stadium)}&date=${encodeURIComponent(date)}`, baseOptions),
-            fetch(`/api/npb?date=${encodeURIComponent(date)}`, baseOptions),
+            fetch(dataCacheUrl(`/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}`, 600), baseOptions),
+            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
+            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
+            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
+            fetch(dataCacheUrl(`/api/npb/market?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}`, 600), baseOptions),
+            fetch(dataCacheUrl(`/api/npb/weather?stadium=${encodeURIComponent(stadium)}&date=${encodeURIComponent(date)}`, 3600), baseOptions),
+            fetch(dataCacheUrl(`/api/npb?date=${encodeURIComponent(date)}`, 300), baseOptions),
           ]);
 
         const [analysis, awayRecent, homeRecent, headToHead, market, weather, schedule] = await Promise.all([

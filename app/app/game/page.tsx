@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { dataCacheUrl } from "../lib/client-data-cache";
 
 type KboStanding = {
   rank: number;
@@ -592,7 +593,7 @@ function AdvancedAnalysisSection({
     let active = true;
     setMarketLoading(true);
     fetch(
-      `/api/betman?date=${encodeURIComponent(date)}&away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}`,
+      dataCacheUrl(`/api/betman?date=${encodeURIComponent(date)}&away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}`, 600),
       { cache: "no-store" },
     )
       .then((r) => r.json())
@@ -2080,32 +2081,32 @@ function GameDetailContent() {
           awayFormResponse,
           homeFormResponse,
         ] = await Promise.all([
-          fetch("/api/kbo/standings", {
+          fetch(dataCacheUrl("/api/kbo/standings", 1800), {
             cache: "no-store",
             signal: controller.signal,
           }),
 
-          fetch("/api/kbo/team-batting", {
+          fetch(dataCacheUrl("/api/kbo/team-batting", 1800), {
             cache: "no-store",
             signal: controller.signal,
           }),
 
-          fetch(`/api/kbo/team-pitching?team=${encodeURIComponent(awayCode)}`, {
+          fetch(dataCacheUrl(`/api/kbo/team-pitching?team=${encodeURIComponent(awayCode)}`, 1800), {
             cache: "no-store",
             signal: controller.signal,
           }),
 
-          fetch(`/api/kbo/team-pitching?team=${encodeURIComponent(homeCode)}`, {
+          fetch(dataCacheUrl(`/api/kbo/team-pitching?team=${encodeURIComponent(homeCode)}`, 1800), {
             cache: "no-store",
             signal: controller.signal,
           }),
 
           fetch(
-            `/api/kbo/team-form?team=${encodeURIComponent(
+            dataCacheUrl(`/api/kbo/team-form?team=${encodeURIComponent(
               awayCode,
             )}&opponent=${encodeURIComponent(
               homeCode,
-            )}&date=${encodeURIComponent(date)}`,
+            )}&date=${encodeURIComponent(date)}`, 600),
             {
               cache: "no-store",
               signal: controller.signal,
@@ -2113,11 +2114,11 @@ function GameDetailContent() {
           ),
 
           fetch(
-            `/api/kbo/team-form?team=${encodeURIComponent(
+            dataCacheUrl(`/api/kbo/team-form?team=${encodeURIComponent(
               homeCode,
             )}&opponent=${encodeURIComponent(
               awayCode,
-            )}&date=${encodeURIComponent(date)}`,
+            )}&date=${encodeURIComponent(date)}`, 600),
             {
               cache: "no-store",
               signal: controller.signal,
@@ -2217,7 +2218,7 @@ function GameDetailContent() {
         if (awayPitcher) {
           opponentRequests.push(
             fetch(
-              `/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(awayPitcher.pcode || "")}&name=${encodeURIComponent(awayStarterName || awayPitcher.player)}&opponent=${encodeURIComponent(homeCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(awayCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=away&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`,
+              dataCacheUrl(`/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(awayPitcher.pcode || "")}&name=${encodeURIComponent(awayStarterName || awayPitcher.player)}&opponent=${encodeURIComponent(homeCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(awayCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=away&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`, 21600),
               { cache: "no-store", signal: controller.signal },
             ),
           );
@@ -2225,7 +2226,7 @@ function GameDetailContent() {
         if (homePitcher) {
           opponentRequests.push(
             fetch(
-              `/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(homePitcher.pcode || "")}&name=${encodeURIComponent(homeStarterName || homePitcher.player)}&opponent=${encodeURIComponent(awayCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(homeCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=home&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`,
+              dataCacheUrl(`/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(homePitcher.pcode || "")}&name=${encodeURIComponent(homeStarterName || homePitcher.player)}&opponent=${encodeURIComponent(awayCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(homeCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=home&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}`, 21600),
               { cache: "no-store", signal: controller.signal },
             ),
           );
