@@ -2081,7 +2081,7 @@ function GameDetailContent() {
           awayFormResponse,
           homeFormResponse,
         ] = await Promise.all([
-          fetch(dataCacheUrl("/api/kbo/standings", 1800), {
+          fetch("/api/kbo/standings", {
             cache: "no-store",
             signal: controller.signal,
           }),
