@@ -1875,9 +1875,11 @@ function FormSummaryCard({
 
 function GameHistoryList({
   title,
+  teamName,
   games,
 }: {
   title: string;
+  teamName: string;
   games: TeamGame[];
 }) {
   const compact = title.includes("맞대결");
@@ -1899,66 +1901,54 @@ function GameHistoryList({
 
       {games.length === 0 ? (
         <p className="mt-5 text-sm text-slate-500">경기 기록이 없습니다.</p>
-      ) : compact ? (
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
-          {visibleGames.map((game, index) => (
-            <div
-              key={`${game.date}-${game.opponent}-${index}`}
-              className="rounded-xl border border-slate-800 bg-slate-950 p-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <ResultBadge result={game.result} />
-                  <div className="min-w-0">
-                    <p className="truncate font-black">
-                      {game.location} · {game.opponent}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {game.date}
-                      {game.stadium ? ` · ${game.stadium}` : ""}
+      ) : (
+        <div className={`mt-5 grid gap-3 ${compact ? "md:grid-cols-2" : ""}`}>
+          {visibleGames.map((game, index) => {
+            const isTeamHome = game.location.includes("홈");
+            const homeName = isTeamHome ? teamName : game.opponent;
+            const awayName = isTeamHome ? game.opponent : teamName;
+            const homeScore = isTeamHome ? game.teamScore : game.opponentScore;
+            const awayScore = isTeamHome ? game.opponentScore : game.teamScore;
+            const homeResult =
+              homeScore > awayScore ? "승" : homeScore < awayScore ? "패" : "무";
+            const awayResult =
+              homeScore > awayScore ? "패" : homeScore < awayScore ? "승" : "무";
+
+            return (
+              <div
+                key={`${game.date}-${game.opponent}-${index}`}
+                className="rounded-xl border border-slate-800 bg-slate-950 p-4"
+              >
+                <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+                  <span>{game.date}</span>
+                  <span>홈팀 왼쪽{game.stadium ? ` · ${game.stadium}` : ""}</span>
+                </div>
+
+                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <div className="min-w-0 text-left">
+                    <span className={`text-sm font-black ${homeResult === "승" ? "text-blue-400" : homeResult === "패" ? "text-red-400" : "text-slate-300"}`}>
+                      {homeResult}
+                    </span>
+                    <p className="mt-1 break-keep font-black">{homeName}</p>
+                  </div>
+
+                  <div className="text-center">
+                    <p className="text-xs font-black text-slate-600">VS</p>
+                    <p className="mt-1 whitespace-nowrap text-lg font-black">
+                      {homeScore} : {awayScore}
                     </p>
                   </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-xl font-black tracking-tight">
-                    {game.teamScore}
-                    <span className="mx-1 text-slate-600">:</span>
-                    {game.opponentScore}
-                  </p>
-                  <p className="mt-1 text-[11px] font-bold text-slate-500">
-                    {game.result === "승"
-                      ? "승리"
-                      : game.result === "패"
-                        ? "패배"
-                        : "무승부"}
-                  </p>
+
+                  <div className="min-w-0 text-right">
+                    <span className={`text-sm font-black ${awayResult === "승" ? "text-blue-400" : awayResult === "패" ? "text-red-400" : "text-slate-300"}`}>
+                      {awayResult}
+                    </span>
+                    <p className="mt-1 break-keep font-black">{awayName}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-5 space-y-3">
-          {visibleGames.map((game, index) => (
-            <div
-              key={`${game.date}-${game.opponent}-${index}`}
-              className="grid grid-cols-[auto_1fr_auto] items-center gap-4 rounded-xl border border-slate-800 bg-slate-950 p-4"
-            >
-              <ResultBadge result={game.result} />
-              <div>
-                <p className="font-black">
-                  {game.location} · {game.opponent}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {game.date}
-                  {game.stadium ? ` · ${game.stadium}` : ""}
-                </p>
-              </div>
-              <p className="text-lg font-black">
-                {game.teamScore} : {game.opponentScore}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </article>
@@ -2512,11 +2502,13 @@ function GameDetailContent() {
               <div className="mt-5 grid gap-5 md:grid-cols-2">
                 <GameHistoryList
                   title={`${away} 최근 경기`}
+                  teamName={away}
                   games={awayForm?.recent10.games ?? []}
                 />
 
                 <GameHistoryList
                   title={`${home} 최근 경기`}
+                  teamName={home}
                   games={homeForm?.recent10.games ?? []}
                 />
               </div>
@@ -2537,6 +2529,7 @@ function GameDetailContent() {
               <div className="mt-5">
                 <GameHistoryList
                   title={`${away} 기준 맞대결 결과`}
+                  teamName={away}
                   games={awayForm?.headToHead.games ?? []}
                 />
               </div>
