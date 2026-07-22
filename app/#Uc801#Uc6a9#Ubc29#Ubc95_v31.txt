@@ -1,0 +1,32 @@
+Sports AI DB 자동수집 v31
+
+이번 구조
+외부 API/공식 기록 → 10분 자동 수집 → Supabase DB 저장 → 방문자는 DB 조회
+
+방문자가 경기 분석을 눌러도:
+1. Supabase DB에 최신 데이터가 있으면 외부 API 호출 없이 즉시 표시
+2. 데이터 유효기간이 지났을 때만 서버가 한 번 갱신
+3. 사용자 접속이 없어도 Vercel Cron이 10분마다 자동 수집
+
+필수 설정
+1. Supabase에서 새 프로젝트 생성
+2. 설정파일/supabase_sports_cache.sql 내용을 Supabase SQL Editor에서 실행
+3. Vercel 환경변수에 아래 3개 등록
+   SUPABASE_URL
+   SUPABASE_SERVICE_ROLE_KEY
+   CRON_SECRET
+4. 프로젝트 최상위에 vercel.json도 넣기
+5. GitHub에 올리고 Vercel 재배포
+
+로컬 적용
+- app 폴더를 기존 app에 덮어쓰기
+- vercel.json은 sports-ai 최상위에 넣기
+- .env.local에 Supabase 값 등록
+- Remove-Item .next -Recurse -Force
+- npm run dev
+
+연결 확인
+http://localhost:3000/api/admin/db-cache-status
+
+databaseConnected가 true면 DB 저장 방식으로 작동합니다.
+false면 사이트는 작동하지만 기존 Vercel 공유 캐시 대체 모드입니다.

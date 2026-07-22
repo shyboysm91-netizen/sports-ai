@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { dataCacheUrl } from "../lib/client-data-cache";
+import { savePregamePrediction } from "../lib/prediction-history";
 
 function Card({
   title,
@@ -626,6 +627,21 @@ function Content() {
     awayStarter || scheduledGame?.awayStarter ? "공식 선발" : resolvedAwayStarter ? "로테이션 1순위 후보" : "발표 전";
   const homeStarterSource =
     homeStarter || scheduledGame?.homeStarter ? "공식 선발" : resolvedHomeStarter ? "로테이션 1순위 후보" : "발표 전";
+
+  useEffect(() => {
+    if (!data || error) return;
+    savePregamePrediction({
+      league: "NPB",
+      date,
+      time,
+      away,
+      home,
+      pick: data.pick,
+      awayRate: Number(data.probability?.away ?? 50),
+      homeRate: Number(data.probability?.home ?? 50),
+      confidence: Number(data.confidence ?? 50),
+    });
+  }, [data, error, date, time, away, home]);
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">

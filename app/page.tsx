@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { dataCacheUrl } from "./lib/client-data-cache";
 
 type League = "KBO" | "MLB" | "NPB";
 type BaseballGame = {
@@ -62,7 +63,8 @@ export default function Home() {
         setLoading(true);
         setErrorMessage("");
         const endpoint = league === "KBO" ? "/api/kbo" : league === "MLB" ? "/api/mlb" : "/api/npb";
-        const response = await fetch(`${endpoint}?date=${encodeURIComponent(selectedDate)}`, { signal: controller.signal, cache: "no-store" });
+        const sourcePath = `${endpoint}?date=${encodeURIComponent(selectedDate)}`;
+        const response = await fetch(dataCacheUrl(sourcePath, 300), { signal: controller.signal, cache: "no-store" });
         const data = (await response.json()) as GamesResponse;
         if (!response.ok || !data.success) throw new Error(data.message ?? `${league} 경기 일정을 불러오지 못했습니다.`);
         setGames(Array.isArray(data.games) ? data.games : []);

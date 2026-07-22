@@ -1,31 +1,9 @@
 import { NextResponse } from "next/server";
 
-type ApiOutcome = {
-  name?: string;
-  price?: number;
-  point?: number;
-};
-
-type ApiMarket = {
-  key?: "h2h" | "spreads" | "totals" | string;
-  last_update?: string;
-  outcomes?: ApiOutcome[];
-};
-
-type ApiBookmaker = {
-  key?: string;
-  title?: string;
-  last_update?: string;
-  markets?: ApiMarket[];
-};
-
-type ApiEvent = {
-  id?: string;
-  commence_time?: string;
-  home_team?: string;
-  away_team?: string;
-  bookmakers?: ApiBookmaker[];
-};
+type ApiOutcome = { name?: string; price?: number; point?: number };
+type ApiMarket = { key?: string; last_update?: string; outcomes?: ApiOutcome[] };
+type ApiBookmaker = { key?: string; title?: string; last_update?: string; markets?: ApiMarket[] };
+type ApiEvent = { id?: string; commence_time?: string; home_team?: string; away_team?: string; bookmakers?: ApiBookmaker[] };
 
 type MarketResponse = {
   success: boolean;
@@ -36,6 +14,7 @@ type MarketResponse = {
   lastUpdate?: string;
   remaining?: string | null;
   used?: string | null;
+  cached?: boolean;
   market: {
     moneyline: { away: number; home: number } | null;
     handicap: { line: number; away: number; home: number } | null;
@@ -47,6 +26,8 @@ type MarketResponse = {
     };
   } | null;
 };
+
+type CacheRow = { payload: MarketResponse; expires_at: string };
 
 const TEAM_ALIASES: Record<string, string[]> = {
   "KIA 타이거즈": ["kia tigers", "kia", "기아 타이거즈", "기아", "kia타이거즈"],
@@ -64,7 +45,6 @@ const TEAM_ALIASES: Record<string, string[]> = {
 function normalize(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9가-힣]/g, "");
 }
-
 function canonicalTeam(value: string) {
   const compact = normalize(value);
   for (const [team, aliases] of Object.entries(TEAM_ALIASES)) {
@@ -72,59 +52,84 @@ function canonicalTeam(value: string) {
   }
   return value.trim();
 }
-
 function kstDayRangeIso(date: string) {
   const [year, month, day] = date.split("-").map(Number);
   if (!year || !month || !day) return null;
-
-  // 한국 날짜 00:00~23:59를 UTC 범위로 변환합니다.
-  // The Odds API는 밀리초가 없는 YYYY-MM-DDTHH:mm:ssZ 형식을 요구합니다.
   const start = new Date(Date.UTC(year, month - 1, day, -9, 0, 0));
   const end = new Date(Date.UTC(year, month - 1, day, 14, 59, 59));
   const cleanIso = (value: Date) => value.toISOString().replace(/\.\d{3}Z$/, "Z");
-
   return { start: cleanIso(start), end: cleanIso(end) };
 }
-
 function market(bookmaker: ApiBookmaker, key: string) {
   return bookmaker.markets?.find((item) => item.key === key);
 }
-
 function outcome(marketValue: ApiMarket | undefined, name: string) {
   const target = canonicalTeam(name);
   return marketValue?.outcomes?.find((item) => canonicalTeam(item.name ?? "") === target);
 }
-
 function totalOutcome(marketValue: ApiMarket | undefined, name: "Over" | "Under") {
-  return marketValue?.outcomes?.find(
-    (item) => (item.name ?? "").toLowerCase() === name.toLowerCase(),
-  );
+  return marketValue?.outcomes?.find((item) => (item.name ?? "").toLowerCase() === name.toLowerCase());
 }
-
 function positiveNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 1;
 }
-
 function finiteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
-
 function selectBookmaker(event: ApiEvent, awayApi: string, homeApi: string) {
   const priority = ["fanduel", "draftkings", "betmgm", "williamhill_us", "bovada"];
   const usable = (event.bookmakers ?? []).filter((bookmaker) => {
     const h2h = market(bookmaker, "h2h");
     return positiveNumber(outcome(h2h, awayApi)?.price) && positiveNumber(outcome(h2h, homeApi)?.price);
   });
-
   usable.sort((a, b) => {
     const ai = priority.indexOf(a.key ?? "");
     const bi = priority.indexOf(b.key ?? "");
-    const ar = ai === -1 ? 999 : ai;
-    const br = bi === -1 ? 999 : bi;
-    return ar - br;
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
   });
-
   return { selected: usable[0], usable };
+}
+
+function supabaseConfig() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return { url: url.replace(/\/$/, ""), key };
+}
+function cacheKey(date: string, away: string, home: string) {
+  return `/api/betman?date=${encodeURIComponent(date)}&away=${encodeURIComponent(canonicalTeam(away))}&home=${encodeURIComponent(canonicalTeam(home))}`;
+}
+async function readCache(keyValue: string): Promise<CacheRow | null> {
+  const { url, key } = supabaseConfig();
+  if (!url || !key) return null;
+  const response = await fetch(`${url}/rest/v1/sports_cache?cache_key=eq.${encodeURIComponent(keyValue)}&select=payload,expires_at&limit=1`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    cache: "no-store",
+  });
+  if (!response.ok) return null;
+  const rows = (await response.json()) as CacheRow[];
+  return rows[0] ?? null;
+}
+async function writeCache(keyValue: string, payload: MarketResponse, ttlSeconds: number) {
+  const { url, key } = supabaseConfig();
+  if (!url || !key) return;
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+  await fetch(`${url}/rest/v1/sports_cache?on_conflict=cache_key`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal",
+    },
+    body: JSON.stringify({ cache_key: keyValue, payload, expires_at: expiresAt, updated_at: new Date().toISOString() }),
+    cache: "no-store",
+  }).catch(() => undefined);
+}
+function isAuthorizedRefresh(req: Request, searchParams: URLSearchParams) {
+  if (searchParams.get("refresh") !== "1") return false;
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 
 export async function GET(req: Request) {
@@ -132,154 +137,91 @@ export async function GET(req: Request) {
   const date = searchParams.get("date")?.trim() ?? "";
   const requestedAway = searchParams.get("away")?.trim() ?? "";
   const requestedHome = searchParams.get("home")?.trim() ?? "";
-
   if (!date || !requestedAway || !requestedHome) {
-    return NextResponse.json<MarketResponse>(
-      {
-        success: false,
-        status: "error",
-        message: "date, away, home 값이 필요합니다.",
-        market: null,
-      },
-      { status: 400 },
-    );
+    return NextResponse.json<MarketResponse>({ success: false, status: "error", message: "date, away, home 값이 필요합니다.", market: null }, { status: 400 });
+  }
+
+  const keyValue = cacheKey(date, requestedAway, requestedHome);
+  const refresh = isAuthorizedRefresh(req, searchParams);
+  const cached = await readCache(keyValue);
+  const cacheFresh = cached ? new Date(cached.expires_at).getTime() > Date.now() : false;
+
+  // 일반 방문자는 저장 데이터가 있으면 만료 여부와 관계없이 DB만 사용합니다.
+  if (cached && (!refresh || cacheFresh)) {
+    return NextResponse.json({ ...cached.payload, cached: true });
   }
 
   const apiKey = process.env.ODDS_API_KEY;
   if (!apiKey) {
-    return NextResponse.json<MarketResponse>(
-      {
-        success: false,
-        status: "error",
-        message: ".env.local에 ODDS_API_KEY가 없습니다.",
-        market: null,
-      },
-      { status: 500 },
-    );
+    if (cached) return NextResponse.json({ ...cached.payload, cached: true });
+    return NextResponse.json<MarketResponse>({ success: false, status: "error", message: ".env.local에 ODDS_API_KEY가 없습니다.", market: null }, { status: 500 });
   }
-
   const range = kstDayRangeIso(date);
   if (!range) {
-    return NextResponse.json<MarketResponse>(
-      {
-        success: false,
-        status: "error",
-        message: "날짜 형식은 YYYY-MM-DD여야 합니다.",
-        market: null,
-      },
-      { status: 400 },
-    );
+    return NextResponse.json<MarketResponse>({ success: false, status: "error", message: "날짜 형식은 YYYY-MM-DD여야 합니다.", market: null }, { status: 400 });
   }
 
-  const params = new URLSearchParams({
-    apiKey,
-    regions: "us",
-    markets: "h2h,spreads,totals",
-    oddsFormat: "decimal",
-    dateFormat: "iso",
-    commenceTimeFrom: range.start,
-    commenceTimeTo: range.end,
-  });
+  const params = new URLSearchParams({ apiKey, regions: "us", markets: "h2h,spreads,totals", oddsFormat: "decimal", dateFormat: "iso", commenceTimeFrom: range.start, commenceTimeTo: range.end });
 
   try {
-    const response = await fetch(
-      `https://api.the-odds-api.com/v4/sports/baseball_kbo/odds?${params.toString()}`,
-      { next: { revalidate: 1800 } },
-    );
-
+    const response = await fetch(`https://api.the-odds-api.com/v4/sports/baseball_kbo/odds?${params.toString()}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
     const remaining = response.headers.get("x-requests-remaining");
     const used = response.headers.get("x-requests-used");
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      return NextResponse.json<MarketResponse>(
-        {
-          success: false,
-          status: "error",
-          message: `The Odds API 오류 (${response.status})${detail ? `: ${detail}` : ""}`,
-          remaining,
-          used,
-          market: null,
-        },
-        { status: 502 },
-      );
+      if (cached) return NextResponse.json({ ...cached.payload, cached: true });
+      const quotaExceeded = response.status === 401 && detail.includes("OUT_OF_USAGE_CREDITS");
+      const payload: MarketResponse = {
+        success: false,
+        status: "error",
+        message: quotaExceeded
+          ? "배당 API 무료 사용량이 소진되었습니다. 사용량이 복구되면 자동 갱신됩니다."
+          : `The Odds API 오류 (${response.status})${detail ? `: ${detail}` : ""}`,
+        remaining,
+        used,
+        market: null,
+      };
+      // 사용량 소진은 6시간, 기타 오류는 10분 저장해 방문자 반복 호출을 차단합니다.
+      await writeCache(keyValue, payload, quotaExceeded ? 21600 : 600);
+      return NextResponse.json(payload, { status: 200 });
     }
 
     const events = (await response.json()) as ApiEvent[];
     const away = canonicalTeam(requestedAway);
     const home = canonicalTeam(requestedHome);
-
-    const event = events.find(
-      (item) =>
-        canonicalTeam(item.away_team ?? "") === away &&
-        canonicalTeam(item.home_team ?? "") === home,
-    );
+    const event = events.find((item) => canonicalTeam(item.away_team ?? "") === away && canonicalTeam(item.home_team ?? "") === home);
 
     if (!event) {
-      return NextResponse.json<MarketResponse>({
-        success: false,
-        status: "unavailable",
-        message: `${date} ${requestedAway} vs ${requestedHome} 경기 배당이 아직 등록되지 않았습니다.`,
-        remaining,
-        used,
-        market: null,
-      });
+      const payload: MarketResponse = { success: false, status: "unavailable", message: `${date} ${requestedAway} vs ${requestedHome} 경기 배당이 아직 등록되지 않았습니다.`, remaining, used, market: null };
+      await writeCache(keyValue, payload, 1800);
+      return NextResponse.json(payload);
     }
 
     const awayApi = event.away_team ?? requestedAway;
     const homeApi = event.home_team ?? requestedHome;
     const { selected, usable } = selectBookmaker(event, awayApi, homeApi);
-
     if (!selected) {
-      return NextResponse.json<MarketResponse>({
-        success: false,
-        status: "unavailable",
-        message: "경기는 찾았지만 승패 배당이 아직 없습니다.",
-        remaining,
-        used,
-        market: null,
-      });
+      const payload: MarketResponse = { success: false, status: "unavailable", message: "경기는 찾았지만 승패 배당이 아직 없습니다.", remaining, used, market: null };
+      await writeCache(keyValue, payload, 1800);
+      return NextResponse.json(payload);
     }
 
     const h2h = market(selected, "h2h");
     const spreads = market(selected, "spreads");
     const totals = market(selected, "totals");
-
     const awayMoney = outcome(h2h, awayApi)?.price;
     const homeMoney = outcome(h2h, homeApi)?.price;
-
     const awaySpread = outcome(spreads, awayApi);
     const homeSpread = outcome(spreads, homeApi);
     const over = totalOutcome(totals, "Over");
     const under = totalOutcome(totals, "Under");
+    const moneyline = positiveNumber(awayMoney) && positiveNumber(homeMoney) ? { away: awayMoney, home: homeMoney } : null;
+    const handicap = finiteNumber(homeSpread?.point) && positiveNumber(awaySpread?.price) && positiveNumber(homeSpread?.price) ? { line: homeSpread.point, away: awaySpread.price, home: homeSpread.price } : null;
+    const total = finiteNumber(over?.point) && positiveNumber(over.price) && positiveNumber(under?.price) ? { line: over.point, under: under.price, over: over.price } : null;
+    const lastUpdate = [selected.last_update, h2h?.last_update, spreads?.last_update, totals?.last_update].filter((value): value is string => Boolean(value)).sort().at(-1);
 
-    const moneyline = positiveNumber(awayMoney) && positiveNumber(homeMoney)
-      ? { away: awayMoney, home: homeMoney }
-      : null;
-
-    // 기존 화면은 홈팀 기준 핸디 라인을 사용합니다.
-    const handicap =
-      finiteNumber(homeSpread?.point) &&
-      positiveNumber(awaySpread?.price) &&
-      positiveNumber(homeSpread?.price)
-        ? {
-            line: homeSpread.point,
-            away: awaySpread.price,
-            home: homeSpread.price,
-          }
-        : null;
-
-    const total =
-      finiteNumber(over?.point) && positiveNumber(over.price) && positiveNumber(under?.price)
-        ? { line: over.point, under: under.price, over: over.price }
-        : null;
-
-    const lastUpdate = [selected.last_update, h2h?.last_update, spreads?.last_update, totals?.last_update]
-      .filter((value): value is string => Boolean(value))
-      .sort()
-      .at(-1);
-
-    return NextResponse.json<MarketResponse>({
+    const payload: MarketResponse = {
       success: true,
       status: "received",
       bookmaker: selected.title ?? selected.key ?? "Sportsbook",
@@ -287,22 +229,14 @@ export async function GET(req: Request) {
       lastUpdate,
       remaining,
       used,
-      market: {
-        moneyline,
-        handicap,
-        total,
-        history: { moneyline: [], handicap: [], total: [] },
-      },
-    });
+      market: { moneyline, handicap, total, history: { moneyline: [], handicap: [], total: [] } },
+    };
+    await writeCache(keyValue, payload, 1800);
+    return NextResponse.json(payload);
   } catch (error) {
-    return NextResponse.json<MarketResponse>(
-      {
-        success: false,
-        status: "error",
-        message: error instanceof Error ? error.message : "배당 수신에 실패했습니다.",
-        market: null,
-      },
-      { status: 500 },
-    );
+    if (cached) return NextResponse.json({ ...cached.payload, cached: true });
+    const payload: MarketResponse = { success: false, status: "error", message: error instanceof Error ? error.message : "배당 수신에 실패했습니다.", market: null };
+    await writeCache(keyValue, payload, 600);
+    return NextResponse.json(payload, { status: 200 });
   }
 }

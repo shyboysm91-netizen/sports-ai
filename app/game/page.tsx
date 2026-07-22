@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { dataCacheUrl } from "../lib/client-data-cache";
+import { savePregamePrediction } from "../lib/prediction-history";
 
 type KboStanding = {
   rank: number;
@@ -2367,6 +2368,21 @@ function GameDetailContent() {
     awayForm,
     homeForm,
   });
+
+  useEffect(() => {
+    if (loading || errorMessage) return;
+    savePregamePrediction({
+      league: "KBO",
+      date,
+      time,
+      away,
+      home,
+      pick: prediction.winner,
+      awayRate: prediction.awayWinProbability,
+      homeRate: prediction.homeWinProbability,
+      confidence: prediction.confidence,
+    });
+  }, [loading, errorMessage, date, time, away, home, prediction.winner, prediction.awayWinProbability, prediction.homeWinProbability, prediction.confidence]);
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">

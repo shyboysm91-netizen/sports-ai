@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { deleteExpiredSportsCache } from "../../../lib/sports-db-cache";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function kstDate(offset = 0) {
   const date = new Date();
@@ -15,19 +15,21 @@ function kstDate(offset = 0) {
   }).format(date);
 }
 
+function authHeader() {
+  return { Authorization: `Bearer ${process.env.CRON_SECRET || ""}` };
+}
+
 async function warm(origin: string, path: string, ttl: number) {
-  const url =
-    `${origin}/api/data-cache?path=${encodeURIComponent(path)}` +
-    `&ttl=${ttl}`;
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${process.env.CRON_SECRET || ""}`,
-    },
-    cache: "no-store",
-  });
-
+  const url = `${origin}/api/data-cache?path=${encodeURIComponent(path)}&ttl=${ttl}&refresh=1`;
+  const response = await fetch(url, { headers: authHeader(), cache: "no-store" });
   return { path, ok: response.ok, status: response.status };
+}
+
+async function cachedJson(origin: string, path: string, ttl: number) {
+  const url = `${origin}/api/data-cache?path=${encodeURIComponent(path)}&ttl=${ttl}&refresh=1`;
+  return fetch(url, { headers: authHeader(), cache: "no-store" })
+    .then((response) => response.json())
+    .catch(() => null);
 }
 
 function gameArray(payload: any) {
@@ -37,43 +39,51 @@ function gameArray(payload: any) {
   return [];
 }
 
+function query(path: string, values: Record<string, unknown>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    const text = String(value ?? "").trim();
+    if (text) params.set(key, text);
+  }
+  return `${path}?${params.toString()}`;
+}
+
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    auth !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ success: false }, { status: 401 });
+  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ success: false, message: "인증 실패" }, { status: 401 });
   }
 
   const origin = new URL(request.url).origin;
-  const dates = [kstDate(0), kstDate(1)];
+  const dates = [kstDate(-2), kstDate(-1), kstDate(0), kstDate(1)];
   const results: Array<{ path: string; ok: boolean; status: number }> = [];
 
   for (const date of dates) {
-    const schedulePaths = [
-      `/api/kbo?date=${date}`,
-      `/api/mlb?date=${date}`,
-      `/api/npb?date=${date}`,
-    ];
+    const schedules = {
+      KBO: await cachedJson(origin, `/api/kbo?date=${date}`, 300),
+      NPB: await cachedJson(origin, `/api/npb?date=${date}`, 300),
+      MLB: await cachedJson(origin, `/api/mlb?date=${date}`, 300),
+    };
 
-    for (const schedulePath of schedulePaths) {
-      results.push(await warm(origin, schedulePath, 300));
-    }
+    results.push(
+      { path: `/api/kbo?date=${date}`, ok: Boolean(schedules.KBO), status: schedules.KBO ? 200 : 500 },
+      { path: `/api/npb?date=${date}`, ok: Boolean(schedules.NPB), status: schedules.NPB ? 200 : 500 },
+      { path: `/api/mlb?date=${date}`, ok: Boolean(schedules.MLB), status: schedules.MLB ? 200 : 500 },
+    );
 
-    // KBO 공통 시즌 데이터
     results.push(await warm(origin, "/api/kbo/standings", 1800));
     results.push(await warm(origin, "/api/kbo/team-batting", 1800));
+    results.push(await warm(origin, `/api/npb/standings?season=${date.slice(0, 4)}`, 1800));
+    results.push(await warm(origin, `/api/mlb/standings?season=${date.slice(0, 4)}`, 1800));
 
-    // 일정 데이터에서 경기별 NPB 분석/날씨/배당을 자동 선반영
-    const npbSchedule = await fetch(
-      `${origin}/api/data-cache?path=${encodeURIComponent(
-        `/api/npb?date=${date}`,
-      )}&ttl=300`,
-      { cache: "no-store" },
-    ).then((r) => r.json()).catch(() => null);
+    for (const game of gameArray(schedules.KBO)) {
+      const away = game.away || "";
+      const home = game.home || "";
+      if (!away || !home) continue;
+      results.push(await warm(origin, query("/api/betman", { date, away, home }), 1800));
+    }
 
-    for (const game of gameArray(npbSchedule)) {
+    for (const game of gameArray(schedules.NPB)) {
       const away = game.away || "";
       const home = game.home || "";
       const stadium = game.stadium || "";
@@ -81,41 +91,32 @@ export async function GET(request: Request) {
       const homeStarter = game.homeStarter || "";
       if (!away || !home) continue;
 
-      results.push(
-        await warm(
-          origin,
-          `/api/npb/analysis?away=${encodeURIComponent(
-            away,
-          )}&home=${encodeURIComponent(home)}&date=${date}` +
-            `&awayStarter=${encodeURIComponent(
-              awayStarter,
-            )}&homeStarter=${encodeURIComponent(homeStarter)}` +
-            `&stadium=${encodeURIComponent(stadium)}`,
-          600,
-        ),
-      );
+      results.push(await warm(origin, query("/api/npb/analysis", { away, home, date, awayStarter, homeStarter, stadium }), 900));
+      if (stadium) results.push(await warm(origin, query("/api/npb/weather", { stadium, date }), 3600));
+      results.push(await warm(origin, query("/api/npb/market", { away, home, date }), 1800));
+    }
 
-      results.push(
-        await warm(
-          origin,
-          `/api/npb/weather?stadium=${encodeURIComponent(
-            stadium,
-          )}&date=${date}`,
-          3600,
-        ),
-      );
-
-      results.push(
-        await warm(
-          origin,
-          `/api/npb/market?away=${encodeURIComponent(
-            away,
-          )}&home=${encodeURIComponent(home)}&date=${date}`,
-          600,
-        ),
-      );
+    for (const game of gameArray(schedules.MLB)) {
+      const away = game.awayApi || game.away || "";
+      const home = game.homeApi || game.home || "";
+      if (!away || !home) continue;
+      results.push(await warm(origin, query("/api/mlb/market", {
+        league: "MLB",
+        date,
+        away,
+        home,
+        commenceTime: game.commenceTime || game.startTime || "",
+      }), 1800));
     }
   }
+
+  // 전날 종료 경기의 실제 점수와 적중 여부를 자동 반영합니다.
+  const resultResponse = await fetch(`${origin}/api/predictions/results`, {
+    method: "POST",
+    headers: authHeader(),
+    cache: "no-store",
+  });
+  const resultUpdate = await resultResponse.json().catch(() => null);
 
   await deleteExpiredSportsCache();
 
@@ -125,5 +126,6 @@ export async function GET(request: Request) {
     total: results.length,
     successCount: results.filter((item) => item.ok).length,
     failed: results.filter((item) => !item.ok),
+    resultUpdate,
   });
 }

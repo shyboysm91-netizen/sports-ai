@@ -11,6 +11,10 @@ type KboGame = {
   homeStarter: string;
   awayStarterCode: string;
   homeStarterCode: string;
+  awayScore?: number;
+  homeScore?: number;
+  completed?: boolean;
+  status?: string;
 };
 
 type UnknownObject = Record<string, unknown>;
@@ -175,6 +179,31 @@ function findStarter(game: UnknownObject, side: "away" | "home") {
   return { name: "", code: "" };
 }
 
+
+function scoreFromFlattened(game: UnknownObject, side: "away" | "home") {
+  const entries = flatten(game);
+  const sidePattern = side === "away" ? /(away|visit|visitor)/i : /home/i;
+  const scorePattern = /(score|runs?|point|resultScore|teamScore)/i;
+
+  for (const { path, value } of entries) {
+    if (!sidePattern.test(path) || !scorePattern.test(path)) continue;
+    const raw = asText(value).trim();
+    if (!/^\d{1,2}$/.test(raw)) continue;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0 && n <= 30) return n;
+  }
+  return undefined;
+}
+
+function statusFromFlattened(game: UnknownObject) {
+  const entries = flatten(game);
+  const hit = entries.find(({ path, value }) =>
+    /(status|state|result|gameStatus|gameState)/i.test(path) &&
+    /종료|경기종료|FINAL|END|RESULT|COMPLETED/i.test(asText(value)),
+  );
+  return hit ? asText(hit.value) : "";
+}
+
 function collectObjects(value: unknown, out: UnknownObject[] = []) {
   if (Array.isArray(value)) value.forEach((item) => collectObjects(item, out));
   else if (value && typeof value === "object") {
@@ -187,8 +216,7 @@ function collectObjects(value: unknown, out: UnknownObject[] = []) {
 
 function parseNaver(payload: unknown, date: string): KboGame[] {
   const objects = collectObjects(payload);
-  const games: KboGame[] = [];
-  const seen = new Set<string>();
+  const candidates = new Map<string, KboGame>();
 
   for (const obj of objects) {
     const awayObj = findSideObject(obj, "away");
@@ -204,36 +232,58 @@ function parseNaver(payload: unknown, date: string): KboGame[] {
     const home = normalizeTeam(homeRaw);
     if (!Object.values(TEAM_NAMES).includes(away) || !Object.values(TEAM_NAMES).includes(home)) continue;
 
-    const gameDate = pick(obj, ["gameDate", "date", "startDate"]).slice(0, 10) || date;
+    const rawDate = pick(obj, ["gameDate", "date", "startDate", "localDate", "matchDate"]);
+    const gameDate = (rawDate.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? date);
     if (gameDate !== date) continue;
 
-    const rawTime = pick(obj, ["gameTime", "time", "startTime"]);
+    const rawTime = pick(obj, ["gameTime", "time", "startTime", "localTime"]);
     const timeMatch = rawTime.match(/(\d{1,2}):(\d{2})/);
     const time = timeMatch ? `${timeMatch[1].padStart(2, "0")}:${timeMatch[2]}` : "";
     const stadiumObj = objectValue(obj.stadium);
-    const stadium = pick(obj, ["stadiumName", "place", "groundName"])
+    const stadium = pick(obj, ["stadiumName", "place", "groundName", "venueName"])
       || pick(stadiumObj, ["name", "stadiumName"]);
 
     const awayStarter = findStarter(obj, "away");
     const homeStarter = findStarter(obj, "home");
-    const key = `${gameDate}-${time}-${away}-${home}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
 
-    games.push({
-      league: "KBO",
-      date,
-      time,
-      away,
-      home,
-      stadium,
-      awayStarter: awayStarter.name,
-      homeStarter: homeStarter.name,
-      awayStarterCode: awayStarter.code,
-      homeStarterCode: homeStarter.code,
-    });
+    const awayScoreText = pick(awayObj, ["score", "teamScore", "runs", "run", "point", "resultScore", "totalScore"])
+      || pick(obj, ["awayScore", "awayTeamScore", "visitScore", "visitTeamScore", "visitorScore", "visitorTeamScore"]);
+    const homeScoreText = pick(homeObj, ["score", "teamScore", "runs", "run", "point", "resultScore", "totalScore"])
+      || pick(obj, ["homeScore", "homeTeamScore"]);
+    const directAwayScore = /^\d{1,2}$/.test(awayScoreText) ? Number(awayScoreText) : undefined;
+    const directHomeScore = /^\d{1,2}$/.test(homeScoreText) ? Number(homeScoreText) : undefined;
+    const awayScore = directAwayScore ?? scoreFromFlattened(obj, "away");
+    const homeScore = directHomeScore ?? scoreFromFlattened(obj, "home");
+    const status = pick(obj, ["status", "gameStatus", "state", "gameState", "statusCode", "gameStatusCode", "statusName"])
+      || statusFromFlattened(obj);
+    const completed = awayScore !== undefined && homeScore !== undefined
+      && (/종료|경기종료|FINAL|END|RESULT|COMPLETED/i.test(status) || gameDate < koreaToday());
+
+    const game: KboGame = {
+      league: "KBO", date: gameDate, time, away, home, stadium,
+      awayStarter: awayStarter.name, homeStarter: homeStarter.name,
+      awayStarterCode: awayStarter.code, homeStarterCode: homeStarter.code,
+      awayScore, homeScore, completed, status,
+    };
+
+    // 같은 경기의 상위/하위 JSON 객체가 여러 번 잡힐 수 있습니다.
+    // 처음 발견한 객체를 바로 확정하지 않고, 점수·상태·선발 정보가 많은 객체를 남깁니다.
+    const key = `${gameDate}-${away}-${home}`;
+    const previous = candidates.get(key);
+    const quality = (item: KboGame) =>
+      (item.awayScore !== undefined ? 20 : 0) +
+      (item.homeScore !== undefined ? 20 : 0) +
+      (item.completed ? 10 : 0) +
+      (item.status ? 3 : 0) +
+      (item.time ? 2 : 0) +
+      (item.stadium ? 2 : 0) +
+      (item.awayStarter ? 2 : 0) +
+      (item.homeStarter ? 2 : 0);
+
+    if (!previous || quality(game) > quality(previous)) candidates.set(key, game);
   }
-  return games;
+
+  return [...candidates.values()].sort((a, b) => a.time.localeCompare(b.time));
 }
 
 function stripHtml(html: string) {
@@ -248,39 +298,58 @@ function stripHtml(html: string) {
 }
 
 async function loadOfficialFallback(date: string): Promise<KboGame[]> {
-  const month = date.slice(5, 7);
-  const day = date.slice(8, 10);
-  const response = await fetch(
-    `https://eng.koreabaseball.com/Schedule/DailySchedule.aspx?searchDate=${date}`,
-    { headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" }, next: { revalidate: 300 } },
-  );
+  // 과거 경기 결과는 KBO 공식 Scoreboard를 우선 사용합니다.
+  // 이 페이지는 "NC 7 FINAL 5 LG" 형태로 최종 점수를 직접 제공합니다.
+  const scoreboardUrl = `https://eng.koreabaseball.com/Schedule/Scoreboard.aspx?searchDate=${date}`;
+  const response = await fetch(scoreboardUrl, {
+    headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" },
+    cache: "no-store",
+  });
   if (!response.ok) return [];
 
-  const raw = stripHtml(await response.text());
-  const marker = `${month}.${day}`;
-  const start = raw.indexOf(marker);
-  if (start < 0) return [];
+  const text = stripHtml(await response.text());
+  const teamCodes = Object.keys(TEAM_NAMES).sort((a, b) => b.length - a.length);
+  const teamPattern = teamCodes.join("|");
+  const stadiumPattern = "JAMSIL|MUNHAK|INCHEON|SUWON|DAEGU|GWANGJU|SAJIK|CHANGWON|DAEJEON|GOCHEOKSKY|POHANG|ULSAN|CHEONGJU";
+  const headerRe = new RegExp(`\\b(${teamPattern})\\s+(\\d{1,2})\\s+(FINAL|CANCELLED|CANCELED|POSTPONED|SUSPENDED)\\s+(\\d{1,2})\\s+(${teamPattern})\\b`, "gi");
+  const matches = [...text.matchAll(headerRe)];
+  const games: KboGame[] = [];
 
-  const next = /\d{2}\.\d{2}\([A-Z]{3}\)/g;
-  next.lastIndex = start + marker.length;
-  const end = next.exec(raw)?.index ?? raw.length;
-  const dayText = raw.slice(start, end);
-  const teams = Object.keys(TEAM_NAMES).join("|");
-  const stadiums = "JAMSIL|MUNHAK|SUWON|DAEGU|GWANGJU|SAJIK|CHANGWON|DAEJEON|GOCHEOKSKY";
-  const regex = new RegExp(`(\\d{2}:\\d{2})\\s+(${teams})\\s+(?:\\d+\\s*:\\s*\\d+|:)\\s+(${teams})[\\s\\S]*?(${stadiums})`, "g");
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    const awayCode = match[1].toUpperCase();
+    const awayScore = Number(match[2]);
+    const state = match[3].toUpperCase();
+    const homeScore = Number(match[4]);
+    const homeCode = match[5].toUpperCase();
+    if (!TEAM_NAMES[awayCode] || !TEAM_NAMES[homeCode]) continue;
 
-  return [...dayText.matchAll(regex)].map((match) => ({
-    league: "KBO" as const,
-    date,
-    time: match[1],
-    away: TEAM_NAMES[match[2]],
-    home: TEAM_NAMES[match[3]],
-    stadium: match[4],
-    awayStarter: "",
-    homeStarter: "",
-    awayStarterCode: "",
-    homeStarterCode: "",
-  }));
+    const chunkStart = (match.index ?? 0) + match[0].length;
+    const chunkEnd = index + 1 < matches.length ? (matches[index + 1].index ?? text.length) : text.length;
+    const chunk = text.slice(chunkStart, chunkEnd);
+    const stadiumMatch = chunk.match(new RegExp(`\\b(${stadiumPattern})\\b`, "i"));
+    const timeMatch = chunk.match(/\b([0-2]\d:[0-5]\d)\b/);
+    const completed = state === "FINAL";
+
+    games.push({
+      league: "KBO",
+      date,
+      time: timeMatch?.[1] ?? "",
+      away: TEAM_NAMES[awayCode],
+      home: TEAM_NAMES[homeCode],
+      stadium: stadiumMatch?.[1] ?? "",
+      awayStarter: "",
+      homeStarter: "",
+      awayStarterCode: "",
+      homeStarterCode: "",
+      awayScore: completed ? awayScore : undefined,
+      homeScore: completed ? homeScore : undefined,
+      completed,
+      status: state,
+    });
+  }
+
+  return games;
 }
 
 async function loadNaver(date: string) {
@@ -318,6 +387,36 @@ export async function GET(request: Request) {
   const date = searchParams.get("date") ?? koreaToday();
 
   try {
+    const isPast = date < koreaToday();
+    if (isPast) {
+      const [naverGames, officialGames] = await Promise.all([
+        loadNaver(date).catch(() => []),
+        loadOfficialFallback(date).catch(() => []),
+      ]);
+
+      const base = naverGames.length ? naverGames : officialGames;
+      if (base.length) {
+        const merged = base.map((game) => {
+          const official = officialGames.find((item) => item.away === game.away && item.home === game.home);
+          const naver = naverGames.find((item) => item.away === game.away && item.home === game.home);
+          return {
+            ...game,
+            time: game.time || naver?.time || official?.time || "",
+            stadium: game.stadium || naver?.stadium || official?.stadium || "",
+            awayStarter: naver?.awayStarter || game.awayStarter,
+            homeStarter: naver?.homeStarter || game.homeStarter,
+            awayStarterCode: naver?.awayStarterCode || game.awayStarterCode,
+            homeStarterCode: naver?.homeStarterCode || game.homeStarterCode,
+            awayScore: naver?.awayScore ?? official?.awayScore ?? game.awayScore,
+            homeScore: naver?.homeScore ?? official?.homeScore ?? game.homeScore,
+            completed: naver?.completed ?? official?.completed ?? game.completed,
+            status: naver?.status || official?.status || game.status,
+          };
+        });
+        return NextResponse.json({ success: true, source: "Naver Sports + KBO official scoreboard", date, count: merged.length, games: merged });
+      }
+    }
+
     const naverGames = await loadNaver(date);
     if (naverGames.length) {
       return NextResponse.json({

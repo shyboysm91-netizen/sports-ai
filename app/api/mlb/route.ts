@@ -9,8 +9,8 @@ type MlbGame = {
   status?: { detailedState?: string; abstractGameState?: string };
   venue?: { name?: string };
   teams?: {
-    away?: { team?: MlbTeam; probablePitcher?: MlbPerson };
-    home?: { team?: MlbTeam; probablePitcher?: MlbPerson };
+    away?: { team?: MlbTeam; probablePitcher?: MlbPerson; score?: number };
+    home?: { team?: MlbTeam; probablePitcher?: MlbPerson; score?: number };
   };
 };
 type SchedulePayload = { dates?: Array<{ games?: MlbGame[] }> };
@@ -33,6 +33,9 @@ type GameResponse = {
   awayStarterCode: string;
   homeStarterCode: string;
   status: string;
+  awayScore?: number;
+  homeScore?: number;
+  completed: boolean;
 };
 
 function validDate(value: string) {
@@ -120,6 +123,18 @@ export async function GET(request: Request) {
           awayStarterCode: String(game.teams?.away?.probablePitcher?.id ?? ""),
           homeStarterCode: String(game.teams?.home?.probablePitcher?.id ?? ""),
           status: game.status?.detailedState ?? game.status?.abstractGameState ?? "Scheduled",
+          awayScore:
+            typeof game.teams?.away?.score === "number"
+              ? game.teams.away.score
+              : undefined,
+          homeScore:
+            typeof game.teams?.home?.score === "number"
+              ? game.teams.home.score
+              : undefined,
+          completed:
+            /final|completed|game over/i.test(
+              `${game.status?.detailedState ?? ""} ${game.status?.abstractGameState ?? ""}`,
+            ),
         });
       }
     }
