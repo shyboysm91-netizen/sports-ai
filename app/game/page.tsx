@@ -1886,7 +1886,7 @@ function GameHistoryList({
   const visibleGames = compact ? games.slice(0, 8) : games;
 
   return (
-    <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+    <article className="rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-black text-blue-400">경기 결과</p>
@@ -1904,46 +1904,40 @@ function GameHistoryList({
       ) : (
         <div className={`mt-5 grid gap-3 ${compact ? "md:grid-cols-2" : ""}`}>
           {visibleGames.map((game, index) => {
-            const isTeamHome = game.location.includes("홈");
-            const homeName = isTeamHome ? teamName : game.opponent;
-            const awayName = isTeamHome ? game.opponent : teamName;
-            const homeScore = isTeamHome ? game.teamScore : game.opponentScore;
-            const awayScore = isTeamHome ? game.opponentScore : game.teamScore;
-            const homeResult =
-              homeScore > awayScore ? "승" : homeScore < awayScore ? "패" : "무";
-            const awayResult =
-              homeScore > awayScore ? "패" : homeScore < awayScore ? "승" : "무";
+            const teamIsHome = game.location === "홈";
+            const leftName = teamIsHome ? teamName : game.opponent;
+            const rightName = teamIsHome ? game.opponent : teamName;
+            const leftScore = teamIsHome ? game.teamScore : game.opponentScore;
+            const rightScore = teamIsHome ? game.opponentScore : game.teamScore;
+            const leftResult = leftScore > rightScore ? "승" : leftScore < rightScore ? "패" : "무";
+            const rightResult = rightScore > leftScore ? "승" : rightScore < leftScore ? "패" : "무";
+            const resultClass = (result: "승" | "패" | "무") =>
+              result === "승" ? "text-blue-400" : result === "패" ? "text-red-400" : "text-slate-300";
 
             return (
               <div
                 key={`${game.date}-${game.opponent}-${index}`}
                 className="rounded-xl border border-slate-800 bg-slate-950 p-4"
               >
-                <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
-                  <span>{game.date}</span>
-                  <span>홈팀 왼쪽{game.stadium ? ` · ${game.stadium}` : ""}</span>
-                </div>
-
-                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                  <div className="min-w-0 text-left">
-                    <span className={`text-sm font-black ${homeResult === "승" ? "text-blue-400" : homeResult === "패" ? "text-red-400" : "text-slate-300"}`}>
-                      {homeResult}
-                    </span>
-                    <p className="mt-1 break-keep font-black">{homeName}</p>
-                  </div>
-
-                  <div className="text-center">
-                    <p className="text-xs font-black text-slate-600">VS</p>
-                    <p className="mt-1 whitespace-nowrap text-lg font-black">
-                      {homeScore} : {awayScore}
+                <p className="text-xs font-bold text-slate-500">
+                  {game.date}{game.stadium ? ` · ${game.stadium}` : ""}
+                </p>
+                <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+                  <div className="min-w-0">
+                    <p className={`truncate font-black ${resultClass(leftResult)}`}>
+                      {leftResult} {leftName}
                     </p>
                   </div>
-
+                  <div className="text-center">
+                    <p className="text-xs font-black text-slate-500">vs</p>
+                    <p className="mt-1 whitespace-nowrap text-base font-black">
+                      {leftScore} : {rightScore}
+                    </p>
+                  </div>
                   <div className="min-w-0 text-right">
-                    <span className={`text-sm font-black ${awayResult === "승" ? "text-blue-400" : awayResult === "패" ? "text-red-400" : "text-slate-300"}`}>
-                      {awayResult}
-                    </span>
-                    <p className="mt-1 break-keep font-black">{awayName}</p>
+                    <p className={`truncate font-black ${resultClass(rightResult)}`}>
+                      {rightName} {rightResult}
+                    </p>
                   </div>
                 </div>
               </div>

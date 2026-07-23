@@ -59,9 +59,51 @@ async function pitcherStats(playerId: number, season: string, opponentId: number
   ]);
   const p = person?.people?.[0] ?? {};
   const seasonStat = statBlock(stats, "season");
-  const logs = gameLog(stats).slice(-10).reverse().map((row:AnyObject)=>({
-    date: row.date ?? "", opponent: teamNameKo(row.opponent?.name ?? "", row.opponent?.id), isHome: row.isHome ?? false,
-    innings: text(row.stat?.inningsPitched)||"0", runs:num(row.stat?.runs), earnedRuns:num(row.stat?.earnedRuns), hits:num(row.stat?.hits), walks:num(row.stat?.baseOnBalls), strikeouts:num(row.stat?.strikeOuts), pitches:num(row.stat?.numberOfPitches), decision:text(row.stat?.decision)
+  const rawLogs = gameLog(stats).slice(-10).reverse();
+  const logs = await Promise.all(rawLogs.map(async (row:AnyObject)=>{
+    const gamePk = num(row.game?.gamePk ?? row.gamePk);
+
+    // MLB gameLog의 경기별 stat에는 decision 문자열이 없는 경우가 대부분이다.
+    // 대신 해당 경기에서 승리투수면 wins=1, 패전투수면 losses=1로 내려온다.
+    // 이 값을 먼저 사용해야 실제 승/패가 정상 표시된다.
+    const gameWins = num(row.stat?.wins);
+    const gameLosses = num(row.stat?.losses);
+    let decision = gameWins > 0 ? "W" : gameLosses > 0 ? "L" : "";
+
+    // wins/losses가 없는 응답만 공식 경기 decisions로 보완한다.
+    if (!decision && gamePk) {
+      try {
+        const feed = await getJson(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`);
+        const winnerId = num(feed?.liveData?.decisions?.winner?.id);
+        const loserId = num(feed?.liveData?.decisions?.loser?.id);
+        decision = winnerId === playerId ? "W" : loserId === playerId ? "L" : "";
+      } catch {}
+    }
+
+    // 일부 gameLog에는 gamePk가 없으므로 날짜와 상대팀으로 실제 경기를 찾아 보완한다.
+    if (!decision && row.date) {
+      try {
+        const schedule = await getJson(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${row.date}&hydrate=decisions,team`);
+        const games = (schedule?.dates ?? []).flatMap((d: AnyObject) => d?.games ?? []);
+        const opponentId = num(row.opponent?.id);
+        const matched = games.find((g: AnyObject) => {
+          const homeId = num(g?.teams?.home?.team?.id);
+          const awayId = num(g?.teams?.away?.team?.id);
+          const hasOpponent = !opponentId || homeId === opponentId || awayId === opponentId;
+          const winnerId = num(g?.decisions?.winner?.id);
+          const loserId = num(g?.decisions?.loser?.id);
+          return hasOpponent && (winnerId === playerId || loserId === playerId);
+        });
+        const winnerId = num(matched?.decisions?.winner?.id);
+        const loserId = num(matched?.decisions?.loser?.id);
+        decision = winnerId === playerId ? "W" : loserId === playerId ? "L" : "";
+      } catch {}
+    }
+
+    return {
+      date: row.date ?? "", opponent: teamNameKo(row.opponent?.name ?? "", row.opponent?.id), isHome: row.isHome ?? false,
+      innings: text(row.stat?.inningsPitched)||"0", runs:num(row.stat?.runs), earnedRuns:num(row.stat?.earnedRuns), hits:num(row.stat?.hits), walks:num(row.stat?.baseOnBalls), strikeouts:num(row.stat?.strikeOuts), pitches:num(row.stat?.numberOfPitches), decision
+    };
   }));
   const homeRows = logs.filter((x:AnyObject)=>x.isHome);
   const awayRows = logs.filter((x:AnyObject)=>!x.isHome);
