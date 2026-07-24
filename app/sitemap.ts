@@ -5,22 +5,9 @@ const BASE_URL = "https://sports-ai-alpha.vercel.app";
 type League = "KBO" | "MLB" | "NPB";
 
 type BaseballGame = {
-  league?: League;
-  gamePk?: number;
   date?: string;
-  time?: string;
   away?: string;
   home?: string;
-  stadium?: string;
-  awayStarter?: string;
-  homeStarter?: string;
-  awayStarterCode?: string;
-  homeStarterCode?: string;
-  awayTeamId?: number;
-  homeTeamId?: number;
-  commenceTime?: string;
-  awayApiName?: string;
-  homeApiName?: string;
 };
 
 function koreaDate(offsetDays = 0) {
@@ -35,39 +22,15 @@ function gameUrl(league: League, game: BaseballGame) {
   const away = game.away || "원정팀";
   const home = game.home || "홈팀";
   const matchup = `${encodeURIComponent(away)}-vs-${encodeURIComponent(home)}`;
-  const url = new URL(
-    `/analysis/${league.toLowerCase()}/${date}/${matchup}`,
-    BASE_URL,
-  );
 
-  const values: Record<string, string | number | undefined> = {
-    league,
-    gamePk: game.gamePk,
-    date,
-    time: game.time,
-    away,
-    home,
-    awayTeamId: game.awayTeamId,
-    homeTeamId: game.homeTeamId,
-    stadium: game.stadium,
-    awayStarter: game.awayStarter,
-    homeStarter: game.homeStarter,
-    awayStarterCode: game.awayStarterCode,
-    homeStarterCode: game.homeStarterCode,
-    awayApiName: game.awayApiName,
-    homeApiName: game.homeApiName,
-    commenceTime: game.commenceTime,
-  };
-
-  for (const [key, value] of Object.entries(values)) {
-    if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
-  }
-
-  return url.toString();
+  // sitemap URL에는 쿼리스트링을 넣지 않습니다.
+  // '&' 문자가 XML EntityRef 오류를 일으키는 문제를 방지합니다.
+  return `${BASE_URL}/analysis/${league.toLowerCase()}/${date}/${matchup}`;
 }
 
 async function scheduledGameEntries(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [];
+  const seen = new Set<string>();
   const leagues: Array<{ league: League; endpoint: string }> = [
     { league: "KBO", endpoint: "/api/kbo" },
     { league: "MLB", endpoint: "/api/mlb" },
@@ -87,17 +50,22 @@ async function scheduledGameEntries(): Promise<MetadataRoute.Sitemap> {
 
           const data = await response.json();
           const games: BaseballGame[] = Array.isArray(data?.games) ? data.games : [];
+
           for (const game of games) {
             if (!game.away || !game.home) continue;
+            const url = gameUrl(league, { ...game, date: game.date || date });
+            if (seen.has(url)) continue;
+            seen.add(url);
+
             entries.push({
-              url: gameUrl(league, { ...game, date: game.date || date }),
+              url,
               lastModified: new Date(),
               changeFrequency: "daily",
               priority: offset === 0 ? 0.9 : 0.8,
             });
           }
         } catch {
-          // 한 리그 일정 API가 일시적으로 실패해도 기본 sitemap은 계속 제공합니다.
+          // 일정 API가 일시적으로 실패해도 기본 sitemap은 계속 제공합니다.
         }
       });
     }),
