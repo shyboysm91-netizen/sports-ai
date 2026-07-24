@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { dataCacheUrl } from "../lib/client-data-cache";
 import { savePregamePrediction } from "../lib/prediction-history";
 
+function splitValue(v:number|null|undefined,type:"avg"|"ops"|"rate"){if(v==null||!Number.isFinite(v))return "-";if(type==="rate")return `${v.toFixed(1)}%`;return v.toFixed(3).replace(/^0/,"")}
+
 type Standing={teamId:number;team:string;wins:number;losses:number;winningPercentage:number;home:string;away:string;divisionRank:number;leagueRank:number;streak:string};
 type Market={moneyline:{away:number;home:number}|null;handicap:{line:number;away:number;home:number}|null;total:{line:number;under:number;over:number}|null};
 type MarketResponse={success:boolean;message?:string;bookmaker?:string;bookmakerCount?:number;lastUpdate?:string;commenceTime?:string;marketState?:"pregame"|"live";eventAway?:string;eventHome?:string;matchMode?:"exact"|"time_fallback";market:Market|null};
@@ -25,7 +27,6 @@ type VenuePitchSplit={games:number;wins:number;losses:number;era:string;whip:str
 type GameContextResponse={success:boolean;message?:string;venue?:{id:number;name:string;indoor?:boolean};weather?:{condition:string;tempF:number|null;tempC?:number|null;feelsLikeC?:number|null;humidity?:number|null;precipitationProbability?:number|null;wind:string;windEffect:string;source?:string};umpire?:{name:string|null;status:string};pitchers?:{away:{home:VenuePitchSplit;away:VenuePitchSplit;venue:VenuePitchSplit};home:{home:VenuePitchSplit;away:VenuePitchSplit;venue:VenuePitchSplit}};note?:string};
 
 function pct(v?:number){return v==null?"-":`${(v*100).toFixed(1)}%`}
-function splitValue(v:number|null|undefined,type:"avg"|"ops"|"rate"){if(v==null||!Number.isFinite(v))return "-";if(type==="rate")return `${v.toFixed(1)}%`;return v.toFixed(3).replace(/^0/,"")}
 function recentSummary(rows:Recent[]){const r=rows.slice(0,10);return{wins:r.filter(x=>x.result==="승").length,losses:r.filter(x=>x.result==="패").length,draws:r.filter(x=>x.result==="무").length,runs:r.reduce((s,x)=>s+x.runs,0),allowed:r.reduce((s,x)=>s+x.allowed,0)}}
 function numeric(v:string|number|undefined){const n=Number(v);return Number.isFinite(n)?n:0}
 function scoreAnalysis(a:Standing|undefined,h:Standing|undefined,data:Analysis|null){
