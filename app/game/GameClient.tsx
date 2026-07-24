@@ -2302,7 +2302,7 @@ function GameDetailContent() {
               away,
               resolvedAwayStarterCode,
             ))
-          : awayPitchers[0];
+          : undefined;
 
         const homePitcher = resolvedHomeStarterName
           ? (matchedHomePitcher ??
@@ -2312,7 +2312,7 @@ function GameDetailContent() {
               home,
               resolvedHomeStarterCode,
             ))
-          : homePitchers[0];
+          : undefined;
 
         const opponentRequests: Promise<Response>[] = [];
 

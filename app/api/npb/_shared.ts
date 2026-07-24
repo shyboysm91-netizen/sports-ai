@@ -55,7 +55,38 @@ export function outsToInnings(outs: number) {
   return `${Math.floor(outs / 3)}.${outs % 3}`;
 }
 
+
+const JAPANESE_NAME_OVERRIDES: Record<string, string> = {
+  "西舘 昂汰": "니시다테 코타",
+  "栗林 良吏": "구리바야시 료지",
+  "涌井 秀章": "와쿠이 히데아키",
+  "Ｏ．ビド": "오스틴 비도",
+  "伊原 陵人": "이하라 타카토",
+  "竹丸 和幸": "다케마루 카즈유키",
+  "加藤 貴之": "가토 다카유키",
+  "荘司 康誠": "쇼지 코세이",
+  "武内 夏暉": "다케우치 나츠키",
+  "大津 亮介": "오쓰 료스케",
+  "Ｓ．ジェリー": "스펜서 젤리",
+  "廣池 康志郎": "히로이케 코시로",
+  "アドゥワ 誠": "아두와 마코토",
+  "高橋 奎二": "다카하시 게이지",
+};
+
+export function normalizePitcherName(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s・.·,，'’"()（）*+_-]/g, "");
+}
+
 const NAME_OVERRIDES: Record<string,string> = {
+  "Nishidate, Kota":"니시다테 코타","Nishidate, Kouta":"니시다테 코타",
+  "Kuribayashi, Ryoji":"구리바야시 료지","Kuribayashi, Ryouji":"구리바야시 료지",
+  "Wakui, Hideaki":"와쿠이 히데아키","Ihara, Takato":"이하라 타카토",
+  "Takemaru, Kazuyuki":"다케마루 카즈유키","Kato, Takayuki":"가토 다카유키",
+  "Shoji, Kosei":"쇼지 코세이","Takeuchi, Natsuki":"다케우치 나츠키",
+  "Otsu, Ryosuke":"오쓰 료스케","Hiroike, Koshiro":"히로이케 코시로",
   "Okugawa, Yasunobu":"오쿠가와 야스노부","Yamano, Taichi":"야마노 다이치","Matsumoto, Kengo":"마쓰모토 겐고","Yoshimura, Kojiro":"요시무라 고지로","Takanashi, Hirotoshi":"다카나시 히로토시",
   "Kanemaru, Yumeto":"가네마루 유메토","Yanagi, Yuya":"야나기 유야","Ohno, Yudai":"오노 유다이","Takahashi, Hiroto":"다카하시 히로토","Muller, Kyle":"카일 뮬러",
   "Ogawa, Yasuhiro":"오가와 야스히로","Takahashi, Keiji":"다카하시 게이지","Shimizu, Noboru":"시미즈 노보루","Taguchi, Kazuto":"다구치 가즈토","Kizawa, Naofumi":"기자와 나오후미",
@@ -71,7 +102,13 @@ function romanTokenToKo(token:string){
  return out.replace(/ㄴ(?=[가-힣])/g,"ㄴ").replace(/ㄴ$/,"ㄴ");
 }
 export function playerNameKo(name:string){
- const clean=name.replace(/^[*+]/,"").trim(); if(NAME_OVERRIDES[clean]) return NAME_OVERRIDES[clean];
+ const clean=name.replace(/^[*+]/,"").normalize("NFKC").replace(/[\s　]+/g," ").trim();
+ const japaneseOverride=Object.entries(JAPANESE_NAME_OVERRIDES).find(([key])=>normalizePitcherName(key)===normalizePitcherName(clean))?.[1];
+ if(japaneseOverride) return japaneseOverride;
+ const romanOverride=Object.entries(NAME_OVERRIDES).find(([key])=>normalizePitcherName(key)===normalizePitcherName(clean))?.[1];
+ if(romanOverride) return romanOverride;
+ // 일본 한자/가나 이름은 임의 로마자 변환을 하지 않습니다. 매핑이 없으면 원문을 유지합니다.
+ if(/[一-龯ぁ-んァ-ヶ]/.test(clean)) return clean;
  const parts=clean.split(",").map(x=>x.trim()).filter(Boolean); const ordered=parts.length===2?[parts[0],...parts[1].split(/\s+/)]:clean.split(/\s+/);
  return ordered.map(romanTokenToKo).join(" ");
 }

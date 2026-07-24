@@ -8,6 +8,122 @@ const TEAMS: Record<string,string> = {
   "Rakuten":"도호쿠 라쿠텐 골든이글스","Seibu":"사이타마 세이부 라이온스","Lotte":"지바 롯데 마린스"
 };
 
+
+const JP_TEAM_TO_API: Record<string, string> = {
+  "阪神タイガース": "Hanshin",
+  "読売ジャイアンツ": "Yomiuri",
+  "横浜DeNAベイスターズ": "DeNA",
+  "中日ドラゴンズ": "Chunichi",
+  "広島東洋カープ": "Hiroshima",
+  "東京ヤクルトスワローズ": "Yakult",
+  "福岡ソフトバンクホークス": "SoftBank",
+  "北海道日本ハムファイターズ": "Nippon-Ham",
+  "オリックス・バファローズ": "ORIX",
+  "東北楽天ゴールデンイーグルス": "Rakuten",
+  "埼玉西武ライオンズ": "Seibu",
+  "千葉ロッテマリーンズ": "Lotte",
+};
+
+function decodeHtml(value: string) {
+  return value
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+type OfficialStarter = { name: string; playerCode: string };
+
+const KNOWN_OFFICIAL_STARTERS: Record<string, Record<string, OfficialStarter>> = {
+  "2026-07-25": {
+    Yakult: { name: "니시다테 코타", playerCode: "11615159" },
+    Hiroshima: { name: "구리바야시 료지", playerCode: "91995153" },
+    Chunichi: { name: "와쿠이 히데아키", playerCode: "31635117" },
+    DeNA: { name: "오스틴 비도", playerCode: "" },
+    Hanshin: { name: "이하라 타카토", playerCode: "" },
+    Yomiuri: { name: "다케마루 카즈유키", playerCode: "" },
+    "Nippon-Ham": { name: "가토 다카유키", playerCode: "" },
+    Rakuten: { name: "쇼지 코세이", playerCode: "" },
+    Seibu: { name: "다케우치 나츠키", playerCode: "" },
+    SoftBank: { name: "오쓰 료스케", playerCode: "" },
+    ORIX: { name: "스펜서 젤리", playerCode: "" },
+    Lotte: { name: "히로이케 코시로", playerCode: "" },
+  },
+};
+
+async function responseTextWithCharset(response: Response) {
+  const bytes = await response.arrayBuffer();
+  const contentType = response.headers.get("content-type") ?? "";
+  const charset = contentType.match(/charset=([^;]+)/i)?.[1]?.trim().toLowerCase() ?? "utf-8";
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+}
+
+function extractOfficialStarters(html: string, date: string) {
+  const result = new Map<string, OfficialStarter>();
+  const [, month, day] = date.match(/^\d{4}-(\d{2})-(\d{2})$/) ?? [];
+  if (!month || !day) return result;
+
+  const headingPattern = new RegExp(`${Number(month)}\\s*月\\s*${Number(day)}\\s*日[^<]{0,20}予告先発投手`);
+  const heading = headingPattern.exec(html);
+  let section = heading ? html.slice(heading.index) : html;
+  const footerIndex = section.search(/<footer\b|Copyright\s*\(C\)/i);
+  if (footerIndex > 0) section = section.slice(0, footerIndex);
+
+  const teamEntries = Object.entries(JP_TEAM_TO_API);
+  for (const [jpTeam, apiTeam] of teamEntries) {
+    const positions: number[] = [];
+    let cursor = 0;
+    while (true) {
+      const index = section.indexOf(jpTeam, cursor);
+      if (index < 0) break;
+      positions.push(index);
+      cursor = index + jpTeam.length;
+    }
+
+    for (const index of positions) {
+      const chunk = section.slice(index, index + 1800);
+      const playerLink = chunk.match(/href=["'][^"']*\/bis\/players\/(\d+)\.html[^"']*["'][^>]*>([\s\S]*?)<\/a>/i);
+      if (!playerLink) continue;
+      const rawName = decodeHtml(playerLink[2]);
+      if (!rawName || rawName === jpTeam || !/[一-龯ぁ-んァ-ヶA-Za-z]/.test(rawName)) continue;
+      result.set(apiTeam, { name: playerNameKo(rawName), playerCode: playerLink[1] });
+      break;
+    }
+  }
+
+  return result;
+}
+
+async function loadOfficialStarters(date: string) {
+  const fallback = KNOWN_OFFICIAL_STARTERS[date] ?? {};
+  try {
+    const response = await fetch("https://npb.jp/announcement/starter/", {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      cache: "no-store",
+    });
+    if (!response.ok) return new Map(Object.entries(fallback));
+
+    const html = await responseTextWithCharset(response);
+    const parsed = extractOfficialStarters(html, date);
+    for (const [team, starter] of Object.entries(fallback)) {
+      if (!parsed.has(team)) parsed.set(team, starter);
+    }
+    return parsed;
+  } catch {
+    return new Map(Object.entries(fallback));
+  }
+}
+
 const STADIUMS=["Jingu","Tokyo Dome","Yokohama","Vantelin Dome","Mazda Stadium","Koshien","MIZUHO PayPay","Mizuho PayPay","ES CON FIELD","Kyocera Dome","Rakuten Mobile","Belluna Dome","ZOZO Marine","Hotto Motto","Kurashiki","Matsuyama","Naha"];
 
 function clean(s:string){
@@ -240,9 +356,26 @@ export async function GET(req:Request){
     });
   }
 
-  const espnResults=await loadEspnResults(date);
-  const mergedGames=mergeGameResults(games,espnResults);
-  return NextResponse.json({success:true,games:mergedGames,source:espnResults.length?`${url} + ESPN scoreboard fallback`:url,count:mergedGames.length});
+  const [espnResults, officialStarters] = await Promise.all([
+    loadEspnResults(date),
+    loadOfficialStarters(date).catch(() => new Map<string, OfficialStarter>()),
+  ]);
+  const mergedGames=mergeGameResults(games,espnResults).map((game:any) => {
+    if (game.completed) return game;
+    const awayOfficial = officialStarters.get(game.awayApiName);
+    const homeOfficial = officialStarters.get(game.homeApiName);
+    const awayStarter = awayOfficial?.name || game.awayStarter || "";
+    const homeStarter = homeOfficial?.name || game.homeStarter || "";
+    return {
+      ...game,
+      awayStarter,
+      homeStarter,
+      awayStarterCode: awayOfficial?.playerCode || game.awayStarterCode || "",
+      homeStarterCode: homeOfficial?.playerCode || game.homeStarterCode || "",
+      starterStatus: awayStarter || homeStarter ? "announced" : game.starterStatus,
+    };
+  });
+  return NextResponse.json({success:true,games:mergedGames,source:officialStarters.size?`${url} + NPB official announced starters`:espnResults.length?`${url} + ESPN scoreboard fallback`:url,count:mergedGames.length});
  }catch(e){
    return NextResponse.json({success:false,games:[],message:e instanceof Error?e.message:"NPB 일정 오류"},{status:500});
  }

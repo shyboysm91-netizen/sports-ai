@@ -81,7 +81,10 @@ export default function Home() {
         const endpoint =
           league === "KBO" ? "/api/kbo" : league === "MLB" ? "/api/mlb" : "/api/npb";
         const sourcePath = `${endpoint}?date=${encodeURIComponent(selectedDate)}`;
-        const response = await fetch(dataCacheUrl(sourcePath, 300), {
+        // KBO/NPB 예고 선발은 경기 당일까지 자주 갱신되므로 오래된 브라우저 캐시를 사용하지 않습니다.
+        // MLB는 공식 probable pitcher API 응답을 5분만 재사용합니다.
+        const requestUrl = league === "MLB" ? dataCacheUrl(sourcePath, 300) : sourcePath;
+        const response = await fetch(requestUrl, {
           signal: controller.signal,
           cache: "no-store",
         });
@@ -94,81 +97,9 @@ export default function Home() {
 
         const loadedGames = Array.isArray(data.games) ? data.games : [];
 
-        if (league === "MLB") {
-          setGames(loadedGames);
-          return;
-        }
-
-        const kboTeamCodes: Record<string, string> = {
-          "KIA 타이거즈": "KIA",
-          "삼성 라이온즈": "SAMSUNG",
-          "LG 트윈스": "LG",
-          "두산 베어스": "DOOSAN",
-          "KT 위즈": "KT",
-          "SSG 랜더스": "SSG",
-          "롯데 자이언츠": "LOTTE",
-          "한화 이글스": "HANWHA",
-          "NC 다이노스": "NC",
-          "키움 히어로즈": "KIWOOM",
-        };
-
-        const missingTeams = new Map<string, string>();
-
-        for (const game of loadedGames) {
-          if (!game.awayStarter) {
-            missingTeams.set(game.away, game.awayApiName || game.away);
-          }
-          if (!game.homeStarter) {
-            missingTeams.set(game.home, game.homeApiName || game.home);
-          }
-        }
-
-        if (!missingTeams.size) {
-          setGames(loadedGames);
-          return;
-        }
-
-        const fallbackStarters = new Map<string, string>();
-
-        await Promise.all(
-          [...missingTeams.entries()].map(async ([displayName, apiName]) => {
-            try {
-              const fallbackPath =
-                league === "KBO"
-                  ? `/api/kbo/team-pitching?team=${encodeURIComponent(
-                      kboTeamCodes[displayName] || apiName,
-                    )}`
-                  : `/api/npb/pitchers?team=${encodeURIComponent(
-                      displayName,
-                    )}&season=${encodeURIComponent(selectedDate.slice(0, 4))}`;
-
-              const fallbackResponse = await fetch(dataCacheUrl(fallbackPath, 600), {
-                signal: controller.signal,
-                cache: "no-store",
-              });
-
-              if (!fallbackResponse.ok) return;
-
-              const fallbackData = await fallbackResponse.json();
-              const name =
-                league === "KBO"
-                  ? String(fallbackData?.pitchers?.[0]?.player ?? "")
-                  : String(fallbackData?.rotation?.[0]?.name ?? "");
-
-              if (name) fallbackStarters.set(displayName, name);
-            } catch {
-              // 공식 선발이 비어 있을 때만 사용하는 보조값이므로 실패해도 일정은 그대로 표시합니다.
-            }
-          }),
-        );
-
-        setGames(
-          loadedGames.map((game) => ({
-            ...game,
-            awayStarter: game.awayStarter || fallbackStarters.get(game.away) || "",
-            homeStarter: game.homeStarter || fallbackStarters.get(game.home) || "",
-          })),
-        );
+        // 선발은 일정 API가 확인한 공식 예고 선발만 사용합니다.
+        // 팀 투수 목록의 첫 번째 선수를 임의 선발로 넣지 않습니다.
+        setGames(loadedGames);
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") return;
 

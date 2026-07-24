@@ -556,22 +556,17 @@ function Content() {
           signal: controller.signal,
         };
 
-        const [analysisResponse, awayRecentResponse, homeRecentResponse, headToHeadResponse, marketResponse, weatherResponse, scheduleResponse] =
+        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=3`;
+        const [analysisResponse, marketResponse, weatherResponse, scheduleResponse] =
           await Promise.all([
-            fetch(dataCacheUrl(`/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=2`, 600), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
+            fetch(dataCacheUrl(`${analysisBase}&fast=1`, 300), baseOptions),
             fetch(dataCacheUrl(`/api/npb/market?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}`, 600), baseOptions),
             fetch(dataCacheUrl(`/api/npb/weather?stadium=${encodeURIComponent(stadium)}&date=${encodeURIComponent(date)}`, 3600), baseOptions),
             fetch(dataCacheUrl(`/api/npb?date=${encodeURIComponent(date)}`, 300), baseOptions),
           ]);
 
-        const [analysis, awayRecent, homeRecent, headToHead, market, weather, schedule] = await Promise.all([
+        const [analysis, market, weather, schedule] = await Promise.all([
           analysisResponse.json(),
-          awayRecentResponse.json(),
-          homeRecentResponse.json(),
-          headToHeadResponse.json(),
           marketResponse.json(),
           weatherResponse.json(),
           scheduleResponse.json(),
@@ -584,12 +579,15 @@ function Content() {
           throw new Error(analysis.message || "NPB 분석을 불러오지 못했습니다.");
         }
 
-        setData({
-          ...analysis,
-          awayRecent: awayRecent.success ? awayRecent : null,
-          homeRecent: homeRecent.success ? homeRecent : null,
-          headToHead: headToHead.success ? headToHead : null,
-        });
+        // 승률·타선·최근 기록은 먼저 표시하고, 투수 상세 정보만 뒤에서 보강합니다.
+        setData(analysis);
+
+        fetch(dataCacheUrl(analysisBase, 600), baseOptions)
+          .then((response) => response.json().then((full) => ({ response, full })))
+          .then(({ response, full }) => {
+            if (!controller.signal.aborted && response.ok && full?.success) setData(full);
+          })
+          .catch(() => {});
       } catch (loadError) {
         if (loadError instanceof Error && loadError.name === "AbortError") return;
         setError(
@@ -629,21 +627,23 @@ function Content() {
     );
   });
   const resolvedAwayStarter =
-    awayStarter || scheduledGame?.awayStarter || data?.awayRotation?.[0]?.name || "";
+    awayStarter || scheduledGame?.awayStarter || "";
   const resolvedHomeStarter =
-    homeStarter || scheduledGame?.homeStarter || data?.homeRotation?.[0]?.name || "";
-  const awayStarterPitcher =
-    data?.awayRotation?.find((pitcher: any) => pitcher.name === resolvedAwayStarter) ||
-    data?.awayRotation?.[0] ||
-    null;
-  const homeStarterPitcher =
-    data?.homeRotation?.find((pitcher: any) => pitcher.name === resolvedHomeStarter) ||
-    data?.homeRotation?.[0] ||
-    null;
-  const awayStarterSource =
-    awayStarter || scheduledGame?.awayStarter ? "공식 선발" : resolvedAwayStarter ? "로테이션 1순위 후보" : "발표 전";
-  const homeStarterSource =
-    homeStarter || scheduledGame?.homeStarter ? "공식 선발" : resolvedHomeStarter ? "로테이션 1순위 후보" : "발표 전";
+    homeStarter || scheduledGame?.homeStarter || "";
+  const normalizePitcherName = (value: unknown) =>
+    String(value ?? "").replace(/[\s・.·]/g, "").toLowerCase();
+  const awayStarterPitcher = resolvedAwayStarter
+    ? data?.awayRotation?.find((pitcher: any) =>
+        normalizePitcherName(pitcher.name) === normalizePitcherName(resolvedAwayStarter),
+      ) || null
+    : null;
+  const homeStarterPitcher = resolvedHomeStarter
+    ? data?.homeRotation?.find((pitcher: any) =>
+        normalizePitcherName(pitcher.name) === normalizePitcherName(resolvedHomeStarter),
+      ) || null
+    : null;
+  const awayStarterSource = resolvedAwayStarter ? "NPB 공식 예고 선발" : "발표 전";
+  const homeStarterSource = resolvedHomeStarter ? "NPB 공식 예고 선발" : "발표 전";
 
   useEffect(() => {
     if (!data || error) return;

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { normalizePitcherName, playerNameKo } from "../_shared";
 
 type Standing={team:string;rank:number;wins:number;losses:number;draws:number;winningPercentage:number;home:string;away:string};
 type Batting={average:number;onBasePercentage:number;sluggingPercentage:number;ops:number;homeRuns:number;walks:number;strikeouts:number;runs:number;games:number};
@@ -12,9 +13,11 @@ async function json(origin:string,path:string){
   return data;
 }
 function sameName(a:string,b:string){
-  const clean=(v:string)=>v.toLowerCase().replace(/[^a-z0-9가-힣]/g,"");
-  return clean(a)===clean(b) || clean(a).includes(clean(b)) || clean(b).includes(clean(a));
+  const aa=normalizePitcherName(playerNameKo(a));
+  const bb=normalizePitcherName(playerNameKo(b));
+  return Boolean(aa&&bb&&(aa===bb || (aa.length>=4&&bb.length>=4&&(aa.includes(bb)||bb.includes(aa)))));
 }
+
 
 function f(value:number|undefined,digits=2){
   return typeof value==="number"&&Number.isFinite(value)?value.toFixed(digits):"-";
@@ -83,12 +86,17 @@ function matchupSentence(away:string,home:string,h2h:any,score:number){
 }
 
 function starterCard(rotation:any[], requested:string){
-  const pitcher=(requested?rotation.find((p:any)=>sameName(p.name??"",requested)||sameName(p.originalName??"",requested)):null)||rotation[0]||null;
+  if(!requested) return null;
+  const requestedKo=playerNameKo(requested);
+  const pitcher=rotation.find((p:any)=>
+    sameName(p.name??"",requestedKo)||sameName(p.originalName??"",requested)||sameName(p.originalName??"",requestedKo)
+  )||null;
   if(!pitcher) return null;
   return {
     ...pitcher,
-    requestedName:requested||"",
-    status:requested?"공식 선발 연결":"로테이션 후보",
+    name: requestedKo,
+    requestedName:requestedKo,
+    status:"공식 선발 연결",
   };
 }
 
@@ -114,8 +122,8 @@ export async function GET(req:Request){
    json(u.origin,`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`),
   ]);
 
-  const awayBase=starterCard(awayPit.rotation||[],awayStarter);
-  const homeBase=starterCard(homePit.rotation||[],homeStarter);
+  const awayBase=starterCard(awayPit.players||awayPit.rotation||[],awayStarter);
+  const homeBase=starterCard(homePit.players||homePit.rotation||[],homeStarter);
   const [awayDetail,homeDetail]=fast
     ? [null,null]
     : await Promise.all([
