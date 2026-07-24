@@ -79,6 +79,62 @@ function PitcherCard({label,fallbackName,p}:{label:string;fallbackName:string;p:
   <div className="mt-3 overflow-hidden rounded-xl border border-slate-800">{p.recent10.map((r,i)=>{const d=decisionLabel(r.decision);return <div key={i} className="grid grid-cols-[72px_1fr_36px] items-center gap-2 border-b border-slate-800 px-3 py-2.5 text-sm last:border-b-0 sm:grid-cols-[90px_1fr_48px_72px_72px_72px]"><span className="text-xs text-slate-400">{String(r.date).slice(5)} · {r.isHome?"홈":"원정"}</span><span className="truncate font-bold">vs {r.opponent}</span><b className={d==="승"?"text-blue-400":d==="패"?"text-red-400":"text-slate-500"}>{d}</b><span className="hidden text-center sm:block">{r.innings}이닝</span><span className="hidden text-center sm:block">{r.earnedRuns}자책</span><span className="hidden text-center sm:block">{r.pitches?`${r.pitches}구`:"-"}</span></div>})}</div></>:<p className="mt-4 text-sm text-slate-500">예고 선발 상세 기록이 아직 없습니다.</p>}
  </div>
 }
+
+function BullpenCard({name,b}:{name:string;b:Bullpen|null|undefined}){
+  if(!b){
+    return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+      <h3 className="text-xl font-black">{name} 불펜</h3>
+      <p className="mt-4 text-sm text-slate-500">불펜 데이터를 불러오지 못했습니다.</p>
+    </div>;
+  }
+
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <p className="text-xs font-black text-blue-400">{name} 불펜</p>
+        <h3 className="mt-2 text-xl font-black">{b.label}</h3>
+      </div>
+      <p className="text-2xl font-black text-blue-400">{b.score}점</p>
+    </div>
+
+    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Stat label="어제 투구 수" value={b.yesterdayPitches}/>
+      <Stat label="최근 3경기 투구 수" value={b.recent3GamePitches}/>
+      <Stat label="연투 투수" value={b.consecutivePitchers}/>
+      <Stat label="과부하 투수" value={b.heavyPitchers}/>
+    </div>
+
+    {b.consecutiveNames.length>0&&
+      <div className="mt-4 rounded-xl bg-slate-950 p-4">
+        <p className="text-xs font-black text-slate-500">연투 투수</p>
+        <p className="mt-2 text-sm font-bold text-slate-300">{b.consecutiveNames.join(", ")}</p>
+      </div>
+    }
+
+    {b.heavyNames.length>0&&
+      <div className="mt-3 rounded-xl bg-slate-950 p-4">
+        <p className="text-xs font-black text-slate-500">과부하 주의</p>
+        <p className="mt-2 text-sm font-bold text-red-300">{b.heavyNames.join(", ")}</p>
+      </div>
+    }
+
+    <div className="mt-5 overflow-hidden rounded-xl border border-slate-800">
+      <div className="grid grid-cols-[1fr_72px_64px_56px] bg-slate-950 px-3 py-2 text-center text-xs font-black text-slate-500">
+        <span className="text-left">투수</span><span>이닝</span><span>투구 수</span><span>실점</span>
+      </div>
+      {b.pitchers.length>0?b.pitchers.map((p,i)=>
+        <div key={`${p.name}-${i}`} className="grid grid-cols-[1fr_72px_64px_56px] items-center border-t border-slate-800 px-3 py-3 text-center text-sm">
+          <span className="truncate text-left font-bold">{p.name}</span>
+          <span>{p.innings}</span>
+          <span>{p.pitches}</span>
+          <span>{p.runs}</span>
+        </div>
+      ):<p className="border-t border-slate-800 p-4 text-center text-sm text-slate-500">최근 불펜 등판 기록이 없습니다.</p>}
+    </div>
+
+    {b.latestGameDate&&<p className="mt-3 text-xs text-slate-500">최근 경기 기준: {b.latestGameDate}</p>}
+  </div>
+}
 function PitchArsenalCard({label,name,data}:{label:string;name:string;data:PitchArsenalResponse|null}){const splits=data?.batterSplits;return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6"><p className="text-xs font-black text-blue-400">{label}</p><h3 className="mt-2 text-xl font-black">{name||"선발 미정"}</h3>{data?.success&&data.pitches.length?<><p className="mt-2 text-sm text-slate-400">시즌 {data.samplePitches.toLocaleString()}구 · 최근 5경기 {data.recentSamplePitches.toLocaleString()}구 기준</p>{splits?<div className="mt-5"><p className="mb-3 font-black">좌·우타자 상대 성적</p><div className="grid gap-3 sm:grid-cols-2">{([{title:"vs 좌타자",row:splits.vsLeft},{title:"vs 우타자",row:splits.vsRight}]).map(({title,row})=><div key={title} className="rounded-xl border border-slate-800 bg-slate-950 p-4"><div className="flex items-center justify-between"><p className="font-black">{title}</p><span className="text-xs text-slate-500">{row.plateAppearances}타석</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-sm"><Stat label="피안타율" value={splitValue(row.battingAvg,"avg")}/><Stat label="피OPS" value={splitValue(row.ops,"ops")}/><Stat label="삼진율" value={splitValue(row.strikeoutRate,"rate")}/><Stat label="볼넷율" value={splitValue(row.walkRate,"rate")}/><Stat label="피홈런" value={row.homeRuns}/><Stat label="표본" value={`${row.atBats}타수`}/></div></div>)}</div></div>:null}<div className="mt-6 space-y-3">{data.pitches.map((pitch)=><div key={pitch.code} className="rounded-xl bg-slate-950 p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-black">{pitch.name}</p><p className="mt-1 text-xs text-slate-500">{pitch.pitches.toLocaleString()}구</p></div><div className="text-right"><p className="text-lg font-black text-blue-400">{pitch.usage.toFixed(1)}%</p><p className="text-xs text-slate-500">최근5경기 {pitch.recentUsage.toFixed(1)}%</p></div></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full bg-blue-600" style={{width:`${Math.min(100,pitch.usage)}%`}}/></div><div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-5"><Stat label="평균 구속" value={pitch.avgVelocity!=null?`${pitch.avgVelocity.toFixed(1)} mph`:"-"}/><Stat label="피안타율" value={pitch.battingAvg!=null?pitch.battingAvg.toFixed(3).replace(/^0/,""):"-"}/><Stat label="헛스윙률" value={pitch.whiffRate!=null?`${pitch.whiffRate.toFixed(1)}%`:"-"}/><Stat label="삼진" value={pitch.strikeouts}/><Stat label="피홈런" value={pitch.homeRuns}/></div></div>)}</div></>:<p className="mt-4 text-sm text-slate-500">{data?.message??"구종 데이터를 불러오는 중입니다."}</p>}</div>}
 
 function VenuePitcherCard({label,name,side}:{label:string;name:string;side?:{home:VenuePitchSplit;away:VenuePitchSplit;venue:VenuePitchSplit}}){const row=(title:string,v?:VenuePitchSplit)=><div className="rounded-xl bg-slate-950 p-4"><p className="text-xs font-black text-slate-500">{title}</p><p className="mt-2 font-black">{v&&v.games>0?`${v.wins}승 ${v.losses}패 · ERA ${v.era} · WHIP ${v.whip}`:"표본 없음"}</p><p className="mt-1 text-xs text-slate-500">{v&&v.games>0?`${v.games}경기 · ${v.innings}이닝`:""}</p></div>;return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6"><p className="text-xs font-black text-blue-400">{label}</p><h3 className="mt-2 text-xl font-black">{name||"선발 미정"}</h3><div className="mt-4 grid gap-3">{row("홈 등판",side?.home)}{row("원정 등판",side?.away)}{row("오늘 경기장 성적",side?.venue)}</div></div>}
