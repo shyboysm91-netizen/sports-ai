@@ -195,73 +195,78 @@ function TeamPanel({
 function RecentPanel({ title, data }: { title: string; data: any }) {
   const summary = data?.summary;
   const games = data?.games || [];
+  const teamName = shortTeamName(data?.team || title.replace(" 최근 10경기", ""));
+  const homeGames = games.filter((game: any) => game.location === "홈" || game.isHome === true);
+  const awayGames = games.filter((game: any) => !(game.location === "홈" || game.isHome === true));
+  const homeWins = homeGames.filter((game: any) => game.result === "승").length;
+  const homeLosses = homeGames.filter((game: any) => game.result === "패").length;
+  const awayWins = awayGames.filter((game: any) => game.result === "승").length;
+  const awayLosses = awayGames.filter((game: any) => game.result === "패").length;
 
   return (
-    <Card title={shortTeamName(title.replace(" 최근 10경기", "")) + " 최근 10경기"}>
-      {summary?.games ? (
+    <Card title={`${teamName} 최근 10경기`}>
+      {games.length ? (
         <>
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            <Metric
-              label="승-패-무"
-              value={`${summary.wins}승 ${summary.losses}패 ${summary.draws}무`}
-            />
-            <Metric label="평균 득점" value={fmt(summary.averageRunsFor, 2)} />
-            <Metric
-              label="평균 실점"
-              value={fmt(summary.averageRunsAgainst, 2)}
-            />
-          </div>
+          <p className="mt-2 text-sm font-bold text-slate-400">
+            최근 {games.length}경기 {summary.wins}승 {summary.draws ? `${summary.draws}무 ` : ""}{summary.losses}패 · 홈 {homeWins}승 {homeLosses}패 · 원정 {awayWins}승 {awayLosses}패 · 득점 {Math.round((summary.averageRunsFor || 0) * summary.games)} / 실점 {Math.round((summary.averageRunsAgainst || 0) * summary.games)}
+          </p>
 
-          <div className="mt-4 space-y-2">
-            {games.slice(0, 5).map((game: any) => {
-              const homeTeam = shortTeamName(game.homeTeam);
-              const awayTeam = shortTeamName(game.awayTeam);
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-800">
+            <div className="grid grid-cols-[52px_58px_1fr_64px_1fr] bg-slate-950 px-3 py-2 text-center text-xs font-black text-slate-500">
+              <span>결과</span>
+              <span>날짜</span>
+              <span>홈</span>
+              <span>점수</span>
+              <span>원정</span>
+            </div>
+            {games.slice(0, 10).map((game: any, index: number) => {
               const hasFullMatch =
                 game.homeTeam &&
                 game.awayTeam &&
                 Number.isFinite(game.homeScore) &&
                 Number.isFinite(game.awayScore);
+              const isHome = game.location === "홈" || game.isHome === true;
+              const homeTeam = hasFullMatch
+                ? shortTeamName(game.homeTeam)
+                : isHome
+                  ? teamName
+                  : shortTeamName(game.opponent);
+              const awayTeam = hasFullMatch
+                ? shortTeamName(game.awayTeam)
+                : isHome
+                  ? shortTeamName(game.opponent)
+                  : teamName;
+              const homeScore = hasFullMatch
+                ? game.homeScore
+                : isHome
+                  ? game.runsFor
+                  : game.runsAgainst;
+              const awayScore = hasFullMatch
+                ? game.awayScore
+                : isHome
+                  ? game.runsAgainst
+                  : game.runsFor;
 
               return (
                 <div
-                  key={`${game.date}-${game.homeTeam || game.opponent}-${game.score}`}
-                  className="rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm"
+                  key={`${game.date}-${game.homeTeam || game.opponent}-${index}`}
+                  className="grid grid-cols-[52px_58px_1fr_64px_1fr] items-center border-t border-slate-800 px-3 py-3 text-center text-sm"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-black">
-                        {hasFullMatch ? (
-                          <>
-                            {homeTeam} {game.homeScore}
-                            <span className="mx-2 text-slate-600">:</span>
-                            {game.awayScore} {awayTeam}
-                          </>
-                        ) : (
-                          <>
-                            {shortTeamName(data?.team)} {game.runsFor}
-                            <span className="mx-2 text-slate-600">:</span>
-                            {game.runsAgainst} {shortTeamName(game.opponent)}
-                          </>
-                        )}
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        {game.date} · {game.venue || "구장 정보 없음"}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`rounded-md border px-2.5 py-1 text-xs font-black ${
-                        game.result === "승"
-                          ? "border-emerald-900 text-emerald-400"
-                          : game.result === "패"
-                            ? "border-red-900 text-red-400"
-                            : "border-slate-700 text-slate-400"
-                      }`}
-                    >
-                      {game.result}
-                    </span>
-                  </div>
+                  <b
+                    className={
+                      game.result === "승"
+                        ? "text-blue-400"
+                        : game.result === "패"
+                          ? "text-red-400"
+                          : "text-slate-300"
+                    }
+                  >
+                    {game.result}
+                  </b>
+                  <span className="text-xs text-slate-400">{String(game.date).slice(5)}</span>
+                  <span className="truncate font-bold">{homeTeam}</span>
+                  <b>{homeScore} : {awayScore}</b>
+                  <span className="truncate font-bold">{awayTeam}</span>
                 </div>
               );
             })}
@@ -276,71 +281,45 @@ function RecentPanel({ title, data }: { title: string; data: any }) {
   );
 }
 
-function HeadToHeadPanel({
-  away,
-  home,
-  data,
-}: {
-  away: string;
-  home: string;
-  data: any;
-}) {
-  const summary = data?.summary;
-  const games = data?.games || [];
-  const homeWins = summary?.wins ?? 0;
-  const awayWins = summary?.losses ?? 0;
-  const draws = summary?.draws ?? 0;
+function HeadToHeadPanel({ away, home, data }: { away: string; home: string; data: any }) {
+  const games = (data?.games || [])
+    .filter((game: any) => {
+      const homeScore = Number(game.homeScore);
+      const awayScore = Number(game.awayScore);
+      return Number.isFinite(homeScore) && Number.isFinite(awayScore) && !(homeScore === 0 && awayScore === 0);
+    })
+    .slice(0, 10);
+  const awayWins = games.filter((game: any) => game.awayTeam === away ? Number(game.awayScore) > Number(game.homeScore) : Number(game.homeScore) > Number(game.awayScore)).length;
+  const homeWins = games.filter((game: any) => game.homeTeam === home ? Number(game.homeScore) > Number(game.awayScore) : Number(game.awayScore) > Number(game.homeScore)).length;
+  const draws = games.filter((game: any) => Number(game.homeScore) === Number(game.awayScore)).length;
+  const isTie = awayWins === homeWins;
+  const leader = awayWins > homeWins ? away : home;
+  const teamClass = (name: string) => isTie ? "text-slate-200" : name === leader ? "text-red-400" : "text-blue-400";
 
   return (
-    <Card title={`${away} vs ${home} 최근 맞대결`}>
-      {summary?.games ? (
+    <Card title="최근 맞대결 10경기">
+      {games.length ? (
         <>
-          <p className="mt-3 text-xs text-slate-500">
-            아래 기록은 홈팀인 {home} 기준으로 집계한 최근 {summary.games}경기입니다.
+          <p className="mt-2 text-sm font-black">
+            <span className={teamClass(away)}>{shortTeamName(away)} {awayWins}승</span>
+            <span className="text-slate-500"> · </span>
+            <span className={teamClass(home)}>{shortTeamName(home)} {homeWins}승</span>
+            {draws ? <span className="text-slate-400"> · {draws}무</span> : null}
           </p>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <Metric
-              label="맞대결 성적"
-              value={`${shortTeamName(away)} ${awayWins}승 · ${shortTeamName(home)} ${homeWins}승${draws ? ` · ${draws}무` : ""}`}
-            />
-            <Metric
-              label={`${shortTeamName(away)} 평균 득점`}
-              value={fmt(summary.averageRunsAgainst, 2)}
-            />
-            <Metric
-              label={`${shortTeamName(home)} 평균 득점`}
-              value={fmt(summary.averageRunsFor, 2)}
-            />
-          </div>
-
-          <div className="mt-4 space-y-2">
-            {games.slice(0, 10).map((game: any) => (
-              <div
-                key={`${game.date}-${game.homeTeam}-${game.awayTeam}-${game.homeScore}-${game.awayScore}`}
-                className="rounded-xl bg-slate-950 px-4 py-4 text-sm"
-              >
-                <div className="grid gap-3 md:grid-cols-[92px_1fr_auto] md:items-center">
-                  <p className="text-xs text-slate-500">{game.date}</p>
-
-                  <div>
-                    <p className="font-black flex items-center gap-2 flex-wrap">
-<span className={`rounded px-2 py-0.5 text-xs font-black ${game.homeScore>game.awayScore?"bg-blue-600 text-white":game.homeScore<game.awayScore?"bg-red-600 text-white":"bg-slate-600 text-white"}`}>{game.homeScore>game.awayScore?"승":game.homeScore<game.awayScore?"패":"무"}</span>
-{shortTeamName(game.homeTeam)} {game.homeScore}<span className="mx-2 text-slate-600">:</span>{game.awayScore} {shortTeamName(game.awayTeam)}
-<span className={`rounded px-2 py-0.5 text-xs font-black ${game.awayScore>game.homeScore?"bg-blue-600 text-white":game.awayScore<game.homeScore?"bg-red-600 text-white":"bg-slate-600 text-white"}`}>{game.awayScore>game.homeScore?"승":game.awayScore<game.homeScore?"패":"무"}</span>
-</p>
-<p className="mt-2 text-xs text-slate-500">홈 {shortTeamName(game.homeTeam)} · 원정 {shortTeamName(game.awayTeam)} · 구장: {game.venue || "구장 정보 없음"}</p>
-</div>
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-800">
+            {games.slice(0, 10).map((game: any, index: number) => (
+              <div key={`${game.date}-${index}`} className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-slate-800 px-3 py-3 last:border-b-0 sm:grid-cols-[1fr_90px]">
+                <div className="min-w-0 text-center font-black">
+                  <span className={teamClass(game.homeTeam)}>{shortTeamName(game.homeTeam)}</span>
+                  <span className="mx-2 text-slate-500">{game.homeScore} : {game.awayScore}</span>
+                  <span className={teamClass(game.awayTeam)}>{shortTeamName(game.awayTeam)}</span>
                 </div>
+                <span className="text-right text-xs text-slate-500">{String(game.date).slice(5)}</span>
               </div>
             ))}
           </div>
         </>
-      ) : (
-        <p className="mt-4 text-sm text-slate-500">
-          최근 맞대결 기록을 불러오지 못했습니다.
-        </p>
-      )}
+      ) : <p className="mt-4 text-sm text-slate-500">최근 맞대결 기록을 불러오지 못했습니다.</p>}
     </Card>
   );
 }
@@ -471,9 +450,9 @@ function StarterPanel({
         <Metric label="삼진" value={selected?.strikeouts ?? "-"} />
       </div>
 
-      {(detail?.recent5 || detail?.opponent || detail?.stadium || detail?.split) ? (
+      {(detail?.recent10 || detail?.recent5 || detail?.opponent || detail?.stadium || detail?.split) ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Metric label="최근 5경기" value={detail?.recent5?.summary || "-"} />
+          <Metric label="최근 등판 최대 10경기" value={detail?.recent10?.summary || detail?.recent5?.summary || "등판 기록 없음"} />
           <Metric label="상대팀 상대전적" value={detail?.opponent?.summary || "-"} />
           <Metric label="해당 구장 성적" value={detail?.stadium?.summary || "-"} />
           <Metric label="홈·원정 성적" value={detail?.split?.summary || "-"} />
@@ -482,9 +461,34 @@ function StarterPanel({
         <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950 p-4">
           <p className="text-sm font-black text-slate-300">다음 연결 항목</p>
           <p className="mt-2 text-xs leading-6 text-slate-500">
-            최근 5경기 · 상대팀 상대전적 · 구장 성적 · 홈/원정 분할
+            최근 등판 최대 10경기 · 상대팀 상대전적 · 구장 성적 · 홈/원정 분할
           </p>
         </div>
+      )}
+
+      {detail?.recent10?.gamesDetail?.length ? (
+        <div className="mt-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-black text-blue-400">최근 등판 10경기 상세</p>
+            <p className="text-xs text-slate-500">날짜 · 상대 · 승패 · 이닝 · 자책 · 볼넷 · 탈삼진 · 투구수</p>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+            {detail.recent10.gamesDetail.map((game: any, index: number) => (
+              <div key={`${game.date}-${game.opponent}-${index}`} className="grid grid-cols-[76px_1fr_34px] items-center gap-2 border-b border-slate-800 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[90px_1fr_42px_72px_65px_65px_65px_70px]">
+                <span className="text-xs text-slate-400">{String(game.date).slice(5)} · {game.side === "home" ? "홈" : "원정"}</span>
+                <span className="truncate font-bold">vs {shortTeamName(game.opponent)}</span>
+                <b className={game.decision === "승" ? "text-blue-400" : game.decision === "패" ? "text-red-400" : "text-slate-500"}>{game.decision || "-"}</b>
+                <span className="hidden text-center sm:block">{game.innings}이닝</span>
+                <span className="hidden text-center sm:block">{game.earnedRuns}자책</span>
+                <span className="hidden text-center sm:block">{game.walks}볼넷</span>
+                <span className="hidden text-center sm:block">{game.strikeouts}K</span>
+                <span className="hidden text-center sm:block">{game.pitches ? `${game.pitches}구` : "-"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-500">최근 등판 상세 기록을 불러오지 못했습니다.</div>
       )}
 
       {!starter && selected && (
@@ -537,6 +541,7 @@ function Content() {
   const [weatherData, setWeatherData] = useState<any>(null);
   const [scheduleData, setScheduleData] = useState<any>(null);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("종합");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -553,7 +558,7 @@ function Content() {
 
         const [analysisResponse, awayRecentResponse, homeRecentResponse, headToHeadResponse, marketResponse, weatherResponse, scheduleResponse] =
           await Promise.all([
-            fetch(dataCacheUrl(`/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}`, 600), baseOptions),
+            fetch(dataCacheUrl(`/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=2`, 600), baseOptions),
             fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
             fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
             fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
@@ -608,9 +613,21 @@ function Content() {
     ? advantageLabel(data.scores.homeAway, away, home)
     : null;
 
-  const scheduledGame = scheduleData?.games?.find(
-    (game: any) => game.away === away && game.home === home,
-  );
+  const normalizeTeamName = (value: unknown) =>
+    String(value ?? "")
+      .replace(/\s+/g, "")
+      .replace(/(야구단|베이스볼클럽)$/g, "")
+      .toLowerCase();
+  const scheduledGame = scheduleData?.games?.find((game: any) => {
+    const gameAway = normalizeTeamName(game?.away);
+    const gameHome = normalizeTeamName(game?.home);
+    const pageAway = normalizeTeamName(away);
+    const pageHome = normalizeTeamName(home);
+    return (
+      (gameAway === pageAway || gameAway.includes(pageAway) || pageAway.includes(gameAway)) &&
+      (gameHome === pageHome || gameHome.includes(pageHome) || pageHome.includes(gameHome))
+    );
+  });
   const resolvedAwayStarter =
     awayStarter || scheduledGame?.awayStarter || data?.awayRotation?.[0]?.name || "";
   const resolvedHomeStarter =
@@ -681,15 +698,17 @@ function Content() {
           </p>
         )}
 
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap gap-2">{["종합","선발","최근경기","맞대결","불펜","배당"].map((tab)=><button key={tab} type="button" onClick={()=>setActiveTab(tab)} className={`rounded-xl border px-4 py-2 text-sm font-black ${activeTab===tab?"border-blue-500 bg-blue-600 text-white":"border-slate-700 bg-slate-900 text-slate-300"}`}>{tab}</button>)}</div>
+
+        {activeTab==="배당" && <div className="mt-6">
           <MarketPanel away={away} home={home} data={marketData} />
-        </div>
+        </div>}
 
-        <div className="mt-6">
+        {activeTab==="종합" && <div className="mt-6">
           <WeatherPanel data={weatherData} stadium={stadium} />
-        </div>
+        </div>}
 
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
+        {activeTab==="선발" && <div className="mt-6 grid gap-5 md:grid-cols-2">
           <StarterPanel
             team={away}
             starter={resolvedAwayStarter}
@@ -704,9 +723,9 @@ function Content() {
             source={homeStarterSource}
             detail={data?.homeStarterDetail}
           />
-        </div>
+        </div>}
 
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
+        {activeTab==="종합" && <div className="mt-6 grid gap-5 md:grid-cols-2">
           <TeamPanel
             name={away}
             standing={data?.awayStanding}
@@ -721,18 +740,18 @@ function Content() {
             pitching={data?.homePitching}
             side="home"
           />
-        </div>
+        </div>}
 
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
+        {activeTab==="최근경기" && <div className="mt-6 grid gap-5 md:grid-cols-2">
           <RecentPanel title={`${away} 최근 10경기`} data={data?.awayRecent} />
           <RecentPanel title={`${home} 최근 10경기`} data={data?.homeRecent} />
-        </div>
+        </div>}
 
-        <div className="mt-6">
+        {activeTab==="맞대결" && <div className="mt-6">
           <HeadToHeadPanel away={away} home={home} data={data?.headToHead} />
-        </div>
+        </div>}
 
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
+        {activeTab==="선발" && <div className="mt-6 grid gap-5 md:grid-cols-2">
           <Card title={`${away} 선발·로테이션`}>
             <p className="mt-2 text-sm text-slate-400">
               공식 선발: <b className="text-white">{resolvedAwayStarter || "미정"}</b>
@@ -746,18 +765,18 @@ function Content() {
             </p>
             <PitcherTable items={data?.homeRotation || []} />
           </Card>
-        </div>
+        </div>}
 
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
+        {activeTab==="불펜" && <div className="mt-6 grid gap-5 md:grid-cols-2">
           <Card title={`${away} 불펜 핵심`}>
             <PitcherTable items={data?.awayBullpen || []} />
           </Card>
           <Card title={`${home} 불펜 핵심`}>
             <PitcherTable items={data?.homeBullpen || []} />
           </Card>
-        </div>
+        </div>}
 
-        <div className="mt-6">
+        {activeTab==="종합" && <div className="mt-6">
           <Card title="AI 비교 분석">
             {data && (
               <>
@@ -910,9 +929,9 @@ function Content() {
               </>
             )}
           </Card>
-        </div>
+        </div>}
 
-        <div className="mt-6">
+        {activeTab==="종합" && <div className="mt-6">
           <Card title="분석 데이터 안내">
             <p className="mt-3 text-sm leading-7 text-slate-400">
               현재 전문가 리포트는 시즌 순위·승률, 팀 타격, 팀 투수력, 선발 기록,
@@ -920,7 +939,7 @@ function Content() {
               경기 당일 라인업과 최근 3일 불펜 투구 수는 다음 단계에서 추가 반영합니다.
             </p>
           </Card>
-        </div>
+        </div>}
       </div>
     </main>
   );

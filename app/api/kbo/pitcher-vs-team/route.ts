@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type OpponentPitchingStats = {
   opponent: string;
   games: number;
@@ -23,6 +26,18 @@ type OpponentPitchingStats = {
   whip: number;
 };
 
+type RecentPitchingDetail = {
+  date: string;
+  opponent: string;
+  homeAway: string;
+  decision: string;
+  innings: string;
+  earnedRuns: number;
+  walks: number;
+  strikeouts: number;
+  pitches: number | null;
+};
+
 type RecentPitchingSummary = {
   games: number;
   wins: number;
@@ -31,6 +46,7 @@ type RecentPitchingSummary = {
   era: number;
   whip: number;
   qualityStarts: number;
+  gamesDetail?: RecentPitchingDetail[];
 };
 
 type SplitPitchingStats = {
@@ -108,6 +124,181 @@ const PRIMARY_STADIUM_BY_TEAM: Record<string, string> = {
   KIWOOM: "고척",
 };
 
+
+
+const KBO_TEAM_ALIASES: Record<string, string> = {
+  KIA: "KIA", "KIA 타이거즈": "KIA", 타이거즈: "KIA",
+  삼성: "SAMSUNG", "삼성 라이온즈": "SAMSUNG", 라이온즈: "SAMSUNG",
+  LG: "LG", "LG 트윈스": "LG", 트윈스: "LG",
+  두산: "DOOSAN", "두산 베어스": "DOOSAN", 베어스: "DOOSAN",
+  KT: "KT", "KT 위즈": "KT", 위즈: "KT",
+  SSG: "SSG", "SSG 랜더스": "SSG", 랜더스: "SSG",
+  롯데: "LOTTE", "롯데 자이언츠": "LOTTE", 자이언츠: "LOTTE",
+  한화: "HANWHA", "한화 이글스": "HANWHA", 이글스: "HANWHA",
+  NC: "NC", "NC 다이노스": "NC", 다이노스: "NC",
+  키움: "KIWOOM", "키움 히어로즈": "KIWOOM", 히어로즈: "KIWOOM",
+};
+
+const KBO_TEAM_FULL_NAME: Record<string, string> = {
+  KIA: "KIA 타이거즈", SAMSUNG: "삼성 라이온즈", LG: "LG 트윈스",
+  DOOSAN: "두산 베어스", KT: "KT 위즈", SSG: "SSG 랜더스",
+  LOTTE: "롯데 자이언츠", HANWHA: "한화 이글스", NC: "NC 다이노스",
+  KIWOOM: "키움 히어로즈",
+};
+
+function normalizeKboTeamCode(value: unknown) {
+  const text = String(value ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  if (KBO_TEAM_ALIASES[text]) return KBO_TEAM_ALIASES[text];
+  const compact = normalize(text);
+  for (const [alias, code] of Object.entries(KBO_TEAM_ALIASES)) {
+    if (compact === normalize(alias) || compact.includes(normalize(alias))) return code;
+  }
+  return "";
+}
+
+function collectJsonObjects(value: unknown, out: Record<string, unknown>[] = []) {
+  if (Array.isArray(value)) value.forEach((item) => collectJsonObjects(item, out));
+  else if (value && typeof value === "object") {
+    const object = value as Record<string, unknown>;
+    out.push(object);
+    Object.values(object).forEach((item) => collectJsonObjects(item, out));
+  }
+  return out;
+}
+
+function firstText(object: Record<string, unknown> | undefined, keys: string[]) {
+  if (!object) return "";
+  for (const key of keys) {
+    const value = object[key];
+    if (typeof value === "string" || typeof value === "number") {
+      const text = String(value).trim();
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
+function objectAt(object: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = object[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  }
+  return undefined;
+}
+
+async function naverGameSupplement(date: string, team: string) {
+  try {
+    const base = "https://api-gw.sports.naver.com/schedule/games";
+    const query = `upperCategoryId=kbaseball&categoryId=kbo&fromDate=${date}&toDate=${date}&size=100`;
+    const response = await fetch(`${base}?${query}`, {
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+
+    const readText = (value: unknown) =>
+      typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+    const readObject = (value: unknown) =>
+      value && typeof value === "object" && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : {};
+    const pickText = (object: Record<string, unknown>, keys: string[]) => {
+      for (const key of keys) {
+        const value = readText(object[key]);
+        if (value) return value;
+      }
+      return "";
+    };
+    const sideObject = (object: Record<string, unknown>, side: "away" | "home") => {
+      const keys = side === "away"
+        ? ["awayTeam", "away", "visitTeam", "visitorTeam", "awayTeamInfo"]
+        : ["homeTeam", "home", "homeTeamInfo"];
+      for (const key of keys) {
+        const found = readObject(object[key]);
+        if (Object.keys(found).length) return found;
+      }
+      return {};
+    };
+    const flattenValues = (
+      value: unknown,
+      path = "",
+      out: Array<{ path: string; value: unknown }> = [],
+    ) => {
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => flattenValues(item, `${path}[${index}]`, out));
+      } else if (value && typeof value === "object") {
+        Object.entries(value as Record<string, unknown>).forEach(([key, child]) =>
+          flattenValues(child, path ? `${path}.${key}` : key, out),
+        );
+      } else {
+        out.push({ path, value });
+      }
+      return out;
+    };
+    const findTeamFromFlattened = (object: Record<string, unknown>, side: "away" | "home") => {
+      const sidePattern = side === "away" ? /(away|visit|visitor)/i : /home/i;
+      const namePattern = /(team.*name|name.*team|fullName|shortName|displayName)$/i;
+      for (const entry of flattenValues(object)) {
+        if (!sidePattern.test(entry.path) || !namePattern.test(entry.path)) continue;
+        const code = normalizeKboTeamCode(readText(entry.value));
+        if (code) return code;
+      }
+      return "";
+    };
+
+    for (const object of collectJsonObjects(payload)) {
+      const awayObj = sideObject(object, "away");
+      const homeObj = sideObject(object, "home");
+      const awayText =
+        pickText(awayObj, ["teamName", "name", "fullName", "shortName", "displayName", "teamCode", "code"]) ||
+        pickText(object, ["awayTeamName", "visitTeamName", "visitorTeamName", "awayName", "visitName"]);
+      const homeText =
+        pickText(homeObj, ["teamName", "name", "fullName", "shortName", "displayName", "teamCode", "code"]) ||
+        pickText(object, ["homeTeamName", "homeName"]);
+      const awayCode = normalizeKboTeamCode(awayText) || findTeamFromFlattened(object, "away");
+      const homeCode = normalizeKboTeamCode(homeText) || findTeamFromFlattened(object, "home");
+      if (!awayCode || !homeCode || (awayCode !== team && homeCode !== team)) continue;
+
+      const rawDate =
+        pickText(object, ["gameDate", "date", "startDate", "localDate", "matchDate", "gameStartDateTime"]) ||
+        flattenValues(object)
+          .map((entry) => readText(entry.value))
+          .find((value) => value.includes(date)) ||
+        "";
+      const foundDate = rawDate.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+      if (foundDate && foundDate !== date) continue;
+
+      const isHome = homeCode === team;
+      const opponentCode = isHome ? awayCode : homeCode;
+      return {
+        opponent: KBO_TEAM_FULL_NAME[opponentCode] || opponentCode,
+        homeAway: isHome ? "홈" : "원정",
+      };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+const MYKBO_BASE = "https://mykbostats.com";
+const MYKBO_TEAM_SCHEDULE: Record<string, string> = {
+  DOOSAN: "1-Doosan-Bears", HANWHA: "4-Hanwha-Eagles", KIA: "5-Kia-Tigers",
+  KIWOOM: "23-Kiwoom-Heroes", KT: "22-KT-Wiz", LG: "6-LG-Twins",
+  LOTTE: "2-Lotte-Giants", NC: "9-NC-Dinos", SAMSUNG: "3-Samsung-Lions", SSG: "24-SSG-Landers",
+};
+const MYKBO_URL_TEAM: Record<string, string> = {
+  DOOSAN: "Doosan", HANWHA: "Hanwha", KIA: "Kia", KIWOOM: "Kiwoom", KT: "KT",
+  LG: "LG", LOTTE: "Lotte", NC: "NC", SAMSUNG: "Samsung", SSG: "SSG",
+};
+const MYKBO_TEAM_KO: Record<string, string> = {
+  Doosan: "두산 베어스", Hanwha: "한화 이글스", Kia: "KIA 타이거즈", Kiwoom: "키움 히어로즈",
+  KT: "KT 위즈", LG: "LG 트윈스", Lotte: "롯데 자이언츠", NC: "NC 다이노스",
+  Samsung: "삼성 라이온즈", SSG: "SSG 랜더스",
+};
+
 const PLAYER_CODE_FALLBACK: Record<string, string> = {
   양현종: "77637",
   김건우: "51867",
@@ -180,7 +371,7 @@ async function fetchHtml(url: string) {
       Accept: "text/html,application/xhtml+xml",
       Referer: "https://www.koreabaseball.com/",
     },
-    next: { revalidate: 21600 },
+    cache: "no-store",
   });
 
   if (!response.ok) {
@@ -409,17 +600,216 @@ function parseOpponentStats(html: string, opponent: string): OpponentPitchingSta
   return null;
 }
 
-function parseRecent(html: string, limit: number): RecentPitchingSummary | null {
-  const rows = getRows(html);
+
+function kstDateText(date: Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function weekStartText(dateText: string) {
+  const date = new Date(`${dateText}T12:00:00+09:00`);
+  const day = date.getDay();
+  date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+  return kstDateText(date);
+}
+
+function myKboGameLinks(text: string, team: string, allowedDates: Set<string>) {
+  const token = MYKBO_URL_TEAM[team];
+  if (!token) return [] as string[];
+  const decoded = text.replace(/&amp;/gi, "&").replace(/\\n/g, "\n");
+  const links = [...decoded.matchAll(/(?:https?:\/\/mykbostats\.com)?(\/games\/\d+-[A-Za-z]+-vs-[A-Za-z]+-\d{8})/gi)]
+    .map((match) => match[1])
+    .filter((href) => {
+      const raw = href.match(/(\d{8})$/)?.[1];
+      if (!raw) return false;
+      const date = `${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`;
+      return allowedDates.has(date) && new RegExp(`(?:^|-)${token}(?:-vs-|-|$)`, "i").test(href);
+    });
+  return [...new Set(links)];
+}
+
+function myKboPitchingTables(html: string) {
+  const start = html.search(/>\s*Pitching\s*</i);
+  const source = start >= 0 ? html.slice(start) : html;
+  return (source.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi) ?? []).filter((table) => {
+    const text = cleanHtml(table);
+    return /\bERA\b/i.test(text) && /\bIP\b/i.test(text) && /\bNP\b/i.test(text);
+  });
+}
+
+function myKboStarterPitches(html: string, href: string, team: string) {
+  const tables = myKboPitchingTables(html);
+  const match = href.match(/\/games\/\d+-([A-Za-z]+)-vs-([A-Za-z]+)-\d{8}$/i);
+  const teams = match ? [match[1], match[2]] : [];
+  const index = teams.findIndex((value) => value.toLowerCase() === (MYKBO_URL_TEAM[team] || "").toLowerCase());
+  const table = tables[index >= 0 ? index : 0];
+  if (!table) return null;
+  const rows = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
+  let headers: string[] = [];
+  for (const row of rows) {
+    const cells = (row.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) ?? []).map(cleanHtml);
+    if (!cells.length) continue;
+    if (cells.some((cell) => cell.toUpperCase() === "NP") && cells.some((cell) => cell.toUpperCase() === "IP")) { headers = cells.map((cell) => cell.toUpperCase()); continue; }
+    if (!/href=["']\/players\/\d+-/i.test(row)) continue;
+    const player = cleanHtml(row.match(/href=["']\/players\/\d+-[^"']+["'][^>]*>([\s\S]*?)<\/a>/i)?.[1] || "");
+    const playerIndex = cells.findIndex((cell) => normalize(cell) === normalize(player));
+    const stats = playerIndex >= 0 ? cells.slice(playerIndex + 1) : cells.slice(1);
+    const npIndex = Math.max(0, headers.findIndex((value) => value === "NP") - 1);
+    const pitches = numberValue(stats[npIndex]);
+    return pitches > 0 ? pitches : null;
+  }
+  return null;
+}
+
+async function enrichRecentDetails(summary: RecentPitchingSummary | null, team: string, opponentCode: string, requestDate: string, origin: string) {
+  const details = summary?.gamesDetail;
+  if (!details?.length) return summary;
+
+  const year = requestDate.slice(0, 4);
+  const normalizedDates = details.map((row) => {
+    const cleaned = row.date.replace(/[.\/]/g, "-");
+    const md = cleaned.replace(/^\d{4}-/, "");
+    return `${year}-${md.padStart(5, "0")}`;
+  });
+
+  // 이미 사이트에서 정상 작동 중인 KBO 팀 경기 일정 API를 우선 사용합니다.
+  // 이 API는 네이버 일정 + KBO 공식 일정 fallback을 함께 사용하므로 날짜별 상대팀 매칭이 가장 안정적입니다.
+  const teamFormByDate = new Map<string, { opponent: string; homeAway: string }>();
+  try {
+    const response = await fetch(
+      `${origin}/api/kbo/team-form?team=${encodeURIComponent(team)}&opponent=${encodeURIComponent(opponentCode || team)}&date=${encodeURIComponent(requestDate)}&starterScheduleVersion=2`,
+      { cache: "no-store", headers: { Accept: "application/json" } },
+    );
+    if (response.ok) {
+      const payload = await response.json() as {
+        seasonGames?: Array<{ date?: string; opponent?: string; location?: string }>;
+        recent10?: { games?: Array<{ date?: string; opponent?: string; location?: string }> };
+      };
+      const games = payload.seasonGames || payload.recent10?.games || [];
+      for (const game of games) {
+        if (!game.date || !game.opponent) continue;
+        teamFormByDate.set(game.date, {
+          opponent: game.opponent,
+          homeAway: game.location === "홈" ? "홈" : "원정",
+        });
+      }
+    }
+  } catch {
+    // 아래 날짜별 보조 조회와 원본 표 파싱으로 계속 진행합니다.
+  }
+
+  // 팀 일정 API에 없는 날짜만 날짜별 네이버 일정으로 한 번 더 보강합니다.
+  const scheduleRows = await Promise.all(normalizedDates.map((date) =>
+    teamFormByDate.has(date) ? Promise.resolve(teamFormByDate.get(date)!) : naverGameSupplement(date, team),
+  ));
+
+  // 실제 투구수는 MyKBO 경기 박스스코어에서 보완합니다. 실패해도 상대팀 표시는 유지됩니다.
+  const pitchesByDate = new Map<string, number | null>();
+  const myKboGameByDate = new Map<string, { opponent: string; homeAway: string }>();
+  const scheduleSlug = MYKBO_TEAM_SCHEDULE[team];
+  if (scheduleSlug) {
+    const allowed = new Set(normalizedDates);
+    const weeks = [...new Set(normalizedDates.map(weekStartText))];
+    const pages = await Promise.all(
+      [...weeks.map((week) => `${MYKBO_BASE}/schedule/${scheduleSlug}/week_of/${week}`), `${MYKBO_BASE}/games/feed_for/${scheduleSlug}`]
+        .map((url) => fetchHtmlSafely(url)),
+    );
+    const links = [...new Set(pages.flatMap((page) => myKboGameLinks(page, team, allowed)))];
+    await Promise.all(links.map(async (href) => {
+      const gameMatch = href.match(/\/games\/\d+-([A-Za-z]+)-vs-([A-Za-z]+)-(\d{8})$/i);
+      if (!gameMatch) return;
+
+      // MyKBO 경기 URL은 "원정팀-vs-홈팀" 순서입니다.
+      // 네이버 일정 응답 형식이 바뀌어도 이 URL에서 상대팀과 홈/원정을 확실히 복원합니다.
+      const [, awayToken, homeToken, raw] = gameMatch;
+      const date = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+      const ownToken = MYKBO_URL_TEAM[team]?.toLowerCase();
+      const isAway = awayToken.toLowerCase() === ownToken;
+      const isHome = homeToken.toLowerCase() === ownToken;
+      if (isAway || isHome) {
+        const opponentToken = isAway ? homeToken : awayToken;
+        myKboGameByDate.set(date, {
+          opponent: MYKBO_TEAM_KO[opponentToken] || opponentToken,
+          homeAway: isHome ? "홈" : "원정",
+        });
+      }
+
+      const html = await fetchHtmlSafely(`${MYKBO_BASE}${href}`);
+      pitchesByDate.set(date, html ? myKboStarterPitches(html, href, team) : null);
+    }));
+  }
+
+  return {
+    ...summary,
+    gamesDetail: details.map((row, index) => {
+      const date = normalizedDates[index];
+      const schedule = scheduleRows[index];
+      const myKboGame = myKboGameByDate.get(date);
+      const pitches = pitchesByDate.get(date);
+      const parsedOpponent = row.opponent && row.opponent !== "-" && row.opponent !== "선발"
+        ? KBO_TEAM_FULL_NAME[normalizeKboTeamCode(row.opponent)] || row.opponent
+        : "";
+      return {
+        ...row,
+        opponent: myKboGame?.opponent || schedule?.opponent || parsedOpponent || "-",
+        homeAway: myKboGame?.homeAway || schedule?.homeAway || (/^(홈|원정|방문)$/.test(row.homeAway) ? row.homeAway.replace("방문", "원정") : "-"),
+        pitches: pitches ?? row.pitches,
+      };
+    }),
+  };
+}
+
+function opponentFromRawDailyRow(rowHtml: string, cells: string[], team: string) {
+  const ownCode = normalizeKboTeamCode(team);
+  const candidates: string[] = [...cells];
+
+  for (const match of rowHtml.matchAll(/(?:alt|title|data-team-name|data-team|aria-label)=["']([^"']+)["']/gi)) {
+    candidates.push(cleanHtml(match[1]));
+  }
+  for (const match of rowHtml.matchAll(/(?:teamCode|teamId|teamName)=([^&"'<>\s]+)/gi)) {
+    candidates.push(decodeURIComponent(match[1]));
+  }
+
+  for (const candidate of candidates) {
+    const code = normalizeKboTeamCode(candidate);
+    if (code && code !== ownCode) return KBO_TEAM_FULL_NAME[code] || candidate;
+  }
+
+  const text = cleanHtml(rowHtml);
+  for (const [alias, code] of Object.entries(KBO_TEAM_ALIASES)) {
+    if (code === ownCode) continue;
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`(?:vs\\s*|@\\s*|상대\\s*)${escaped}(?:\\s|$)`, "i").test(text)) {
+      return KBO_TEAM_FULL_NAME[code] || alias;
+    }
+  }
+  return "";
+}
+
+function homeAwayFromRawDailyRow(rowHtml: string) {
+  const text = cleanHtml(rowHtml);
+  if (/(?:^|\s)(?:원정|방문|@)(?:\s|$)/.test(text)) return "원정";
+  if (/(?:^|\s)홈(?:\s|$)/.test(text)) return "홈";
+  return "-";
+}
+
+function parseRecent(html: string, limit: number, team: string): RecentPitchingSummary | null {
+  const rawRows = html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
   const parsed: Array<{
+    date: string;
+    opponent: string;
+    homeAway: string;
     innings: number;
+    inningsText: string;
     earnedRuns: number;
     hits: number;
     walks: number;
+    strikeouts: number;
+    pitches: number | null;
     result: string;
   }> = [];
 
-  for (const cells of rows) {
+  for (const rowHtml of rawRows) {
+    const cells = (rowHtml.match(/<t[hd]\b[^>]*>[\s\S]*?<\/t[hd]>/gi) ?? []).map(cleanHtml);
     const dateIndex = cells.findIndex((cell) => /^(?:\d{4}[.\-/])?\d{1,2}[.\-/]\d{1,2}$/.test(cell));
     if (dateIndex < 0) continue;
 
@@ -431,11 +821,27 @@ function parseRecent(html: string, limit: number): RecentPitchingSummary | null 
     const innings = parseInnings(values[6]);
     if (innings <= 0 || innings > 12) continue;
 
+    const rawPitchCount = numberValue(values[5]);
+    // KBO 일자별 기록의 상대팀은 날짜 바로 다음 열(values[1])입니다.
+    // 이전 구현은 행 전체에서 팀명을 추측하면서 "선발" 열을 잘못 읽는 경우가 있었습니다.
+    const directOpponent = opponentFromRawDailyRow(rowHtml, values, team);
+    const opponentCode = normalizeKboTeamCode(values[1]);
+    const opponentName = directOpponent || (opponentCode && opponentCode !== normalizeKboTeamCode(team)
+      ? KBO_TEAM_FULL_NAME[opponentCode] || OPPONENT_NAMES[opponentCode] || values[1]
+      : "-");
+
     parsed.push({
+      date: values[0] ?? "",
+      opponent: opponentName,
+      homeAway: homeAwayFromRawDailyRow(rowHtml),
       innings,
+      inningsText: values[6] ?? formatInnings(innings),
       hits: numberValue(values[7]),
       walks: numberValue(values[9]),
+      strikeouts: numberValue(values[11]),
       earnedRuns: numberValue(values[13]),
+      // KBO 표에 실제 투구수 열이 제공될 때만 표시합니다. TBF처럼 작은 값은 투구수로 오인하지 않습니다.
+      pitches: rawPitchCount >= 35 ? rawPitchCount : null,
       result: values[3] ?? "",
     });
   }
@@ -465,6 +871,17 @@ function parseRecent(html: string, limit: number): RecentPitchingSummary | null 
     era: Number(((totals.earnedRuns * 9) / totals.innings).toFixed(2)),
     whip: Number(((totals.hits + totals.walks) / totals.innings).toFixed(2)),
     qualityStarts: totals.qualityStarts,
+    gamesDetail: selected.map((row) => ({
+      date: row.date,
+      opponent: row.opponent,
+      homeAway: row.homeAway,
+      decision: row.result === "승" || row.result === "패" ? row.result : "-",
+      innings: row.inningsText,
+      earnedRuns: row.earnedRuns,
+      walks: row.walks,
+      strikeouts: row.strikeouts,
+      pitches: row.pitches,
+    })),
   };
 }
 
@@ -650,8 +1067,18 @@ export async function GET(request: Request) {
 
     const seasonStats = parseSeasonStats(basicHtml);
     const stats = parseOpponentStats(gameHtml, opponent);
-    const recent5 = parseRecent(dailyHtml, 5);
-    const recent10 = parseRecent(dailyHtml, 10);
+    const requestDate =
+      searchParams.get("date") ??
+      new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(new Date());
+    const parsedRecent10 = parseRecent(dailyHtml, 10, team);
+    const parsedRecent5 = parseRecent(dailyHtml, 5, team);
+    const origin = new URL(request.url).origin;
+    const [recent10, recent5] = await Promise.all([
+      enrichRecentDetails(parsedRecent10, team, opponentCode, requestDate, origin),
+      enrichRecentDetails(parsedRecent5, team, opponentCode, requestDate, origin),
+    ]);
     const splits = parseGamePageSplits(gameHtml);
     const resolvedStadium =
       stadium || PRIMARY_STADIUM_BY_TEAM[homeTeam] || "";
@@ -667,14 +1094,6 @@ export async function GET(request: Request) {
         );
       }) ?? null;
 
-    const requestDate =
-      searchParams.get("date") ??
-      new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Seoul",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(new Date());
     const requestTime = searchParams.get("time") ?? "";
 
     const currentMonthStats = findCurrentSplit(splits.month, [

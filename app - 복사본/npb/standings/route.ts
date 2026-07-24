@@ -1,0 +1,14 @@
+import { NextResponse } from "next/server";
+const KO:Record<string,string>={"Hanshin Tigers":"한신 타이거스","Yomiuri Giants":"요미우리 자이언츠","YOKOHAMA DeNA BAYSTARS":"요코하마 DeNA 베이스타스","Chunichi Dragons":"주니치 드래건스","Hiroshima Toyo Carp":"히로시마 도요 카프","Tokyo Yakult Swallows":"도쿄 야쿠르트 스왈로스","Fukuoka SoftBank Hawks":"후쿠오카 소프트뱅크 호크스","Hokkaido Nippon-Ham Fighters":"홋카이도 닛폰햄 파이터스","ORIX Buffaloes":"오릭스 버팔로스","Tohoku Rakuten Golden Eagles":"도호쿠 라쿠텐 골든이글스","Saitama Seibu Lions":"사이타마 세이부 라이온스","Chiba Lotte Marines":"지바 롯데 마린스"};
+function n(v:string|undefined){const x=Number((v??"").replace(/[^0-9.]/g,""));return Number.isFinite(x)?x:0}
+function rows(html:string,league:string){
+  const out:any[]=[];
+  for(const tr of html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi)||[]){
+    const c=(tr.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi)||[]).map(x=>x.replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").replace(/\s+/g," ").trim());
+    const idx=c.findIndex(x=>KO[x]); if(idx<0)continue;
+    const v=c.slice(idx+1); if(v.length<8)continue;
+    out.push({rank:out.length+1,league,team:KO[c[idx]],apiTeam:c[idx],games:n(v[0]),wins:n(v[1]),losses:n(v[2]),draws:n(v[3]),winningPercentage:n(v[4]),gamesBehind:v[5]||"-",home:v[6]||"-",away:v[7]||"-"});
+  }
+  return out;
+}
+export async function GET(){try{const y=new Date().getFullYear();const urls=[["Central",`https://npb.jp/bis/eng/${y}/stats/std_c.html`],["Pacific",`https://npb.jp/bis/eng/${y}/stats/std_p.html`]] as const;let standings:any[]=[];for(const [l,u] of urls){const r=await fetch(u,{headers:{"User-Agent":"Mozilla/5.0"},cache:"no-store"});if(r.ok)standings=standings.concat(rows(await r.text(),l));}return NextResponse.json({success:true,standings});}catch(e){return NextResponse.json({success:false,standings:[],message:e instanceof Error?e.message:"순위 오류"},{status:500})}}

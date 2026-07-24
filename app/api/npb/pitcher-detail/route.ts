@@ -14,6 +14,8 @@ type Appearance = {
   strikeouts: number;
   earnedRuns: number;
   era: number;
+  decision: string;
+  pitches: number | null;
 };
 
 type GameLink = {
@@ -131,21 +133,38 @@ function parsePitcherRow(cells: string[], requestedOriginal: string, requestedKo
   // NPB 공식 박스스코어의 투수 행은 한쪽 또는 양쪽 팀 기록이 같은 행에 함께 들어올 수 있다.
   // 이름 뒤의 IP, BF, H, BB, HB, SO, ER 7개 숫자를 유연하게 찾는다.
   for (let index = 0; index < cells.length; index++) {
+    const decisionCode = cells[index].match(/\((W|L|S|H)\)/i)?.[1]?.toUpperCase() || "";
     const rawName = cells[index].replace(/\s*\((?:W|L|S|H)\)\s*/gi, "").trim();
     if (!samePitcher(rawName, requestedOriginal) && !samePitcher(playerNameKo(rawName), requestedKo)) continue;
 
-    const stats = cells.slice(index + 1, index + 10);
+    // 공식 박스스코어 투수 기록 열 순서: IP, BF, H, BB, HB, SO, ER.
+    // 승패 표기가 별도 셀로 분리되는 경기까지 대응하기 위해 이름 뒤에서
+    // 이닝(IP)부터 시작하는 숫자 7개를 직접 찾아 고정 순서로 읽는다.
+    const tail = cells.slice(index + 1);
+    const ipIndex = tail.findIndex((value) => /^\d+(?:\.[012])?$/.test(value.trim()));
+    if (ipIndex < 0) continue;
+
+    const stats = tail
+      .slice(ipIndex)
+      .map((value) => value.trim())
+      .filter((value) => /^-?\d+(?:\.[012])?$/.test(value));
     if (stats.length < 7) continue;
-    const ip = stats[0];
-    if (!/^\d+(?:\.[012])?$/.test(ip)) continue;
+
+    const [ip, _battersFaced, hits, walks, hitByPitch, strikeouts, earnedRuns] = stats;
+    const nearbyDecision = cells
+      .slice(index, Math.min(cells.length, index + ipIndex + 2))
+      .join(" ")
+      .match(/\((W|L|S|H)\)/i)?.[1]?.toUpperCase() || decisionCode;
 
     return {
       inningsOuts: inningsToOuts(ip),
-      hits: n(stats[2]),
-      walks: n(stats[3]),
-      hitByPitch: n(stats[4]),
-      strikeouts: n(stats[5]),
-      earnedRuns: n(stats[6]),
+      hits: n(hits),
+      walks: n(walks),
+      hitByPitch: n(hitByPitch),
+      strikeouts: n(strikeouts),
+      earnedRuns: n(earnedRuns),
+      decision: nearbyDecision === "W" ? "승" : nearbyDecision === "L" ? "패" : "-",
+      pitches: null,
     };
   }
   return null;
@@ -225,7 +244,7 @@ export async function GET(request: Request) {
 
   try {
     const end = new Date(`${endText}T12:00:00+09:00`);
-    const dates = Array.from({ length: 75 }, (_, index) => {
+    const dates = Array.from({ length: 420 }, (_, index) => {
       const target = new Date(end);
       target.setDate(target.getDate() - index - 1);
       return kstDate(target);
@@ -233,8 +252,8 @@ export async function GET(request: Request) {
 
     const appearances: Appearance[] = [];
 
-    for (let offset = 0; offset < dates.length && appearances.length < 8; offset += 7) {
-      const batchDates = dates.slice(offset, offset + 7);
+    for (let offset = 0; offset < dates.length && appearances.length < 30; offset += 10) {
+      const batchDates = dates.slice(offset, offset + 10);
       const schedules = await Promise.all(batchDates.map(async (date) => {
         const year = date.slice(0, 4);
         const html = await getText(`https://npb.jp/bis/eng/${year}/games/gm${date.replaceAll("-", "")}.html`, 21600);
@@ -249,19 +268,21 @@ export async function GET(request: Request) {
     }
 
     appearances.sort((a, b) => b.date.localeCompare(a.date));
-    const recentItems = appearances.slice(0, 5);
-    const opponentItems = opponent ? appearances.filter((item) => item.opponent === opponent.ko) : [];
+    const uniqueAppearances = Array.from(new Map(appearances.map((item) => [`${item.date}|${item.opponent}|${item.side}`, item])).values());
+    const recentItems = uniqueAppearances.slice(0, 10);
+    const opponentItems = opponent ? uniqueAppearances.filter((item) => item.opponent === opponent.ko) : [];
     const stadiumItems = stadium
-      ? appearances.filter((item) => normalize(item.venue).includes(normalize(stadium)) || normalize(stadium).includes(normalize(item.venue)))
+      ? uniqueAppearances.filter((item) => normalize(item.venue).includes(normalize(stadium)) || normalize(stadium).includes(normalize(item.venue)))
       : [];
-    const homeItems = appearances.filter((item) => item.side === "home");
-    const awayItems = appearances.filter((item) => item.side === "away");
+    const homeItems = uniqueAppearances.filter((item) => item.side === "home");
+    const awayItems = uniqueAppearances.filter((item) => item.side === "away");
 
     return NextResponse.json({
       success: true,
       source: "NPB 공식 경기별 박스스코어",
       pitcher: koName,
-      recent5: { ...aggregate(recentItems), gamesDetail: recentItems },
+      recent10: { ...aggregate(recentItems), gamesDetail: recentItems },
+      recent5: { ...aggregate(recentItems.slice(0, 5)), gamesDetail: recentItems.slice(0, 5) },
       opponent: aggregate(opponentItems),
       stadium: aggregate(stadiumItems),
       split: {
@@ -270,7 +291,7 @@ export async function GET(request: Request) {
         summary: `홈 ${aggregate(homeItems).summary} / 원정 ${aggregate(awayItems).summary}`,
       },
     }, {
-      headers: { "Cache-Control": "public, s-maxage=21600, stale-while-revalidate=86400" },
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
     });
   } catch (error) {
     return NextResponse.json({

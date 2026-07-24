@@ -1,0 +1,15 @@
+Sports AI KBO 화면 순서 수정 v29
+
+수정 내용
+- 베트맨 배당 · AI 확률 비교 영역을 KBO 상세 화면에서 제거
+- KBO 경기 프리뷰를 먼저 표시
+- SPORTS AI 종합 예측을 경기 프리뷰 바로 아래에 표시
+- 기존 시즌 기록, 타격, 선발, 최근 경기, 상대전적은 그대로 유지
+
+적용 방법
+1. sports-ai 프로젝트 최상위에서 압축 해제
+2. app 폴더 전체 덮어쓰기
+3. 개발 서버 종료
+4. PowerShell에서 Remove-Item .next -Recurse -Force
+5. npm run dev
+6. 브라우저 Ctrl + F5

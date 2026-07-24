@@ -67,7 +67,57 @@ export default function Home() {
         const response = await fetch(dataCacheUrl(sourcePath, 300), { signal: controller.signal, cache: "no-store" });
         const data = (await response.json()) as GamesResponse;
         if (!response.ok || !data.success) throw new Error(data.message ?? `${league} 경기 일정을 불러오지 못했습니다.`);
-        setGames(Array.isArray(data.games) ? data.games : []);
+
+        const loadedGames = Array.isArray(data.games) ? data.games : [];
+        if (league === "MLB") {
+          setGames(loadedGames);
+          return;
+        }
+
+        const kboTeamCodes: Record<string, string> = {
+          "KIA 타이거즈": "KIA", "삼성 라이온즈": "SAMSUNG", "LG 트윈스": "LG",
+          "두산 베어스": "DOOSAN", "KT 위즈": "KT", "SSG 랜더스": "SSG",
+          "롯데 자이언츠": "LOTTE", "한화 이글스": "HANWHA", "NC 다이노스": "NC",
+          "키움 히어로즈": "KIWOOM",
+        };
+
+        const missingTeams = new Map<string, string>();
+        for (const game of loadedGames) {
+          if (!game.awayStarter) missingTeams.set(game.away, game.awayApiName || game.away);
+          if (!game.homeStarter) missingTeams.set(game.home, game.homeApiName || game.home);
+        }
+
+        if (!missingTeams.size) {
+          setGames(loadedGames);
+          return;
+        }
+
+        const fallbackStarters = new Map<string, string>();
+        await Promise.all([...missingTeams.entries()].map(async ([displayName, apiName]) => {
+          try {
+            const fallbackPath = league === "KBO"
+              ? `/api/kbo/team-pitching?team=${encodeURIComponent(kboTeamCodes[displayName] || apiName)}`
+              : `/api/npb/pitchers?team=${encodeURIComponent(displayName)}&season=${encodeURIComponent(selectedDate.slice(0, 4))}`;
+            const fallbackResponse = await fetch(dataCacheUrl(fallbackPath, 600), {
+              signal: controller.signal,
+              cache: "no-store",
+            });
+            if (!fallbackResponse.ok) return;
+            const fallbackData = await fallbackResponse.json();
+            const name = league === "KBO"
+              ? String(fallbackData?.pitchers?.[0]?.player ?? "")
+              : String(fallbackData?.rotation?.[0]?.name ?? "");
+            if (name) fallbackStarters.set(displayName, name);
+          } catch {
+            // 공식 선발이 비어 있을 때만 사용하는 보조값이므로 실패해도 일정은 그대로 표시합니다.
+          }
+        }));
+
+        setGames(loadedGames.map((game) => ({
+          ...game,
+          awayStarter: game.awayStarter || fallbackStarters.get(game.away) || "",
+          homeStarter: game.homeStarter || fallbackStarters.get(game.home) || "",
+        })));
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") return;
         setGames([]);
