@@ -25,6 +25,7 @@ type VenuePitchSplit={games:number;wins:number;losses:number;era:string;whip:str
 type GameContextResponse={success:boolean;message?:string;venue?:{id:number;name:string;indoor?:boolean};weather?:{condition:string;tempF:number|null;tempC?:number|null;feelsLikeC?:number|null;humidity?:number|null;precipitationProbability?:number|null;wind:string;windEffect:string;source?:string};umpire?:{name:string|null;status:string};pitchers?:{away:{home:VenuePitchSplit;away:VenuePitchSplit;venue:VenuePitchSplit};home:{home:VenuePitchSplit;away:VenuePitchSplit;venue:VenuePitchSplit}};note?:string};
 
 function pct(v?:number){return v==null?"-":`${(v*100).toFixed(1)}%`}
+function splitValue(v:number|null|undefined,type:"avg"|"ops"|"rate"){if(v==null||!Number.isFinite(v))return "-";if(type==="rate")return `${v.toFixed(1)}%`;return v.toFixed(3).replace(/^0/,"")}
 function recentSummary(rows:Recent[]){const r=rows.slice(0,10);return{wins:r.filter(x=>x.result==="승").length,losses:r.filter(x=>x.result==="패").length,draws:r.filter(x=>x.result==="무").length,runs:r.reduce((s,x)=>s+x.runs,0),allowed:r.reduce((s,x)=>s+x.allowed,0)}}
 function numeric(v:string|number|undefined){const n=Number(v);return Number.isFinite(n)?n:0}
 function scoreAnalysis(a:Standing|undefined,h:Standing|undefined,data:Analysis|null){
