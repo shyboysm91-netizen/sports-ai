@@ -1,4 +1,7 @@
 import type { MetadataRoute } from "next";
+import { GET as getKboGames } from "./api/kbo/route";
+import { GET as getMlbGames } from "./api/mlb/route";
+import { GET as getNpbGames } from "./api/npb/route";
 
 const BASE_URL = "https://sports-ai-alpha.vercel.app";
 
@@ -13,64 +16,73 @@ type BaseballGame = {
   home?: string;
 };
 
+type RouteHandler = (request: Request) => Promise<Response> | Response;
+
 function koreaDate(offsetDays = 0) {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+
+  return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  });
-
-  const base = new Date();
-  base.setUTCDate(base.getUTCDate() + offsetDays);
-  return formatter.format(base);
+  }).format(date);
 }
 
-function cleanTeamSlug(value: string) {
-  return encodeURIComponent(value.trim());
+function teamSlug(value: string) {
+  return encodeURIComponent(value.trim().replace(/\s+/g, "-"));
 }
 
 function analysisUrl(league: League, game: BaseballGame, fallbackDate: string) {
   const date = game.date || fallbackDate;
-  const away = cleanTeamSlug(game.away || "원정팀");
-  const home = cleanTeamSlug(game.home || "홈팀");
-
-  // sitemap URL에는 쿼리스트링을 넣지 않습니다.
-  // XML의 & 문자 오류를 막고 canonical 주소와 동일하게 유지합니다.
-  return `${BASE_URL}/analysis/${league.toLowerCase()}/${date}/${away}-vs-${home}`;
+  return `${BASE_URL}/analysis/${league.toLowerCase()}/${date}/${teamSlug(
+    game.away || "원정팀",
+  )}-vs-${teamSlug(game.home || "홈팀")}`;
 }
 
-async function loadGames(endpoint: string, date: string): Promise<BaseballGame[]> {
+/**
+ * 배포된 자기 자신의 /api 주소를 fetch하면 sitemap 생성 시점에 빈 결과가
+ * 반환될 수 있습니다. 각 API Route의 GET 함수를 서버에서 직접 실행하여
+ * 실제 경기 목록을 안정적으로 가져옵니다.
+ */
+async function loadGames(
+  handler: RouteHandler,
+  endpoint: string,
+  date: string,
+): Promise<BaseballGame[]> {
   try {
-    const response = await fetch(
+    const request = new Request(
       `${BASE_URL}${endpoint}?date=${encodeURIComponent(date)}`,
-      {
-        next: { revalidate: 300 },
-        headers: { Accept: "application/json" },
-      },
+      { headers: { Accept: "application/json" } },
     );
-
+    const response = await handler(request);
     if (!response.ok) return [];
 
     const data = (await response.json()) as { games?: unknown };
     return Array.isArray(data.games) ? (data.games as BaseballGame[]) : [];
-  } catch {
+  } catch (error) {
+    console.error(`[sitemap] ${endpoint} ${date} 경기 로드 실패`, error);
     return [];
   }
 }
 
 async function scheduledGameEntries(): Promise<MetadataRoute.Sitemap> {
-  const leagueEndpoints: Array<{ league: League; endpoint: string }> = [
-    { league: "KBO", endpoint: "/api/kbo" },
-    { league: "MLB", endpoint: "/api/mlb" },
-    { league: "NPB", endpoint: "/api/npb" },
+  const leagues: Array<{
+    league: League;
+    endpoint: string;
+    handler: RouteHandler;
+  }> = [
+    { league: "KBO", endpoint: "/api/kbo", handler: getKboGames },
+    { league: "MLB", endpoint: "/api/mlb", handler: getMlbGames },
+    { league: "NPB", endpoint: "/api/npb", handler: getNpbGames },
   ];
 
   const requests = [-1, 0, 1].flatMap((offset) => {
     const date = koreaDate(offset);
 
-    return leagueEndpoints.map(async ({ league, endpoint }) => {
-      const games = await loadGames(endpoint, date);
+    return leagues.map(async ({ league, endpoint, handler }) => {
+      const games = await loadGames(handler, endpoint, date);
 
       return games
         .filter((game) => Boolean(game.away && game.home))
@@ -85,7 +97,6 @@ async function scheduledGameEntries(): Promise<MetadataRoute.Sitemap> {
 
   const groups = await Promise.all(requests);
   const unique = new Map<string, MetadataRoute.Sitemap[number]>();
-
   for (const entry of groups.flat()) unique.set(entry.url, entry);
   return [...unique.values()];
 }
