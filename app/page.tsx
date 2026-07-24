@@ -294,12 +294,8 @@ export default function Home() {
           {!loading && !errorMessage && games.length > 0 && (
             <div className="mt-6 grid gap-5 md:grid-cols-2">
               {games.map((game) => {
-                const pathname =
-                  game.league === "KBO"
-                    ? "/game"
-                    : game.league === "MLB"
-                      ? "/mlb-game"
-                      : "/npb-game";
+                const matchupSlug = `${encodeURIComponent(game.away)}-vs-${encodeURIComponent(game.home)}`;
+                const pathname = `/analysis/${game.league.toLowerCase()}/${game.date}/${matchupSlug}`;
 
                 return (
                   <article
