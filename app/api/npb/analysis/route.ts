@@ -99,6 +99,7 @@ export async function GET(req:Request){
   const u=new URL(req.url),q=u.searchParams;
   const away=q.get("away")||"원정팀",home=q.get("home")||"홈팀";
   const awayStarter=q.get("awayStarter")||"",homeStarter=q.get("homeStarter")||"",stadium=q.get("stadium")||"";
+  const fast=q.get("fast")==="1";
   const date=q.get("date")||String(new Date().getFullYear());
   const season=date.slice(0,4);
 
@@ -115,10 +116,12 @@ export async function GET(req:Request){
 
   const awayBase=starterCard(awayPit.rotation||[],awayStarter);
   const homeBase=starterCard(homePit.rotation||[],homeStarter);
-  const [awayDetail,homeDetail]=await Promise.all([
-    awayBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}`):Promise.resolve(null),
-    homeBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}`):Promise.resolve(null),
-  ]);
+  const [awayDetail,homeDetail]=fast
+    ? [null,null]
+    : await Promise.all([
+        awayBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}`):Promise.resolve(null),
+        homeBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}`):Promise.resolve(null),
+      ]);
 
   const a:Standing|undefined=standings.standings?.find((x:Standing)=>x.team===away);
   const h:Standing|undefined=standings.standings?.find((x:Standing)=>x.team===home);
@@ -206,6 +209,7 @@ export async function GET(req:Request){
 
   return NextResponse.json({
     success:true,
+    partial:fast,
     awayStanding:a||null,homeStanding:h||null,
     awayBatting:ab||null,homeBatting:hb||null,
     awayPitching:ap||null,homePitching:hp||null,

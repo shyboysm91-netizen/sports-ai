@@ -545,64 +545,91 @@ function Content() {
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
+
+    const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=2`;
+    const cacheKey = `sports-ai:npb-analysis:${away}|${home}|${date}|${awayStarter}|${homeStarter}|${stadium}`;
+
+    function readSessionCache() {
+      try {
+        const raw = sessionStorage.getItem(cacheKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed?.savedAt || Date.now() - parsed.savedAt > 30 * 60 * 1000) return null;
+        return parsed.data;
+      } catch {
+        return null;
+      }
+    }
+
+    function writeSessionCache(value: any) {
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), data: value }));
+      } catch {
+        // 저장 공간이 부족해도 화면 동작에는 영향 없음
+      }
+    }
+
+    async function loadOptionalData() {
+      const baseOptions = { cache: "no-store" as RequestCache, signal: controller.signal };
+      const results = await Promise.allSettled([
+        fetch(dataCacheUrl(`/api/npb/market?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}`, 600), baseOptions).then((r) => r.json()),
+        fetch(dataCacheUrl(`/api/npb/weather?stadium=${encodeURIComponent(stadium)}&date=${encodeURIComponent(date)}`, 3600), baseOptions).then((r) => r.json()),
+        fetch(dataCacheUrl(`/api/npb?date=${encodeURIComponent(date)}`, 300), baseOptions).then((r) => r.json()),
+      ]);
+      if (!active) return;
+      if (results[0].status === "fulfilled") setMarketData(results[0].value);
+      if (results[1].status === "fulfilled") setWeatherData(results[1].value);
+      if (results[2].status === "fulfilled") setScheduleData(results[2].value);
+    }
 
     async function loadAll() {
       setError("");
-      setData(null);
+      setMarketData(null);
+      setWeatherData(null);
+      setScheduleData(null);
+
+      const cached = readSessionCache();
+      if (cached) setData(cached);
+      else setData(null);
+
+      void loadOptionalData();
 
       try {
-        const baseOptions = {
-          cache: "no-store" as RequestCache,
-          signal: controller.signal,
-        };
+        const baseOptions = { cache: "no-store" as RequestCache, signal: controller.signal };
 
-        const [analysisResponse, awayRecentResponse, homeRecentResponse, headToHeadResponse, marketResponse, weatherResponse, scheduleResponse] =
-          await Promise.all([
-            fetch(dataCacheUrl(`/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=2`, 600), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`, 1800), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/market?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}`, 600), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/weather?stadium=${encodeURIComponent(stadium)}&date=${encodeURIComponent(date)}`, 3600), baseOptions),
-            fetch(dataCacheUrl(`/api/npb?date=${encodeURIComponent(date)}`, 300), baseOptions),
-          ]);
-
-        const [analysis, awayRecent, homeRecent, headToHead, market, weather, schedule] = await Promise.all([
-          analysisResponse.json(),
-          awayRecentResponse.json(),
-          homeRecentResponse.json(),
-          headToHeadResponse.json(),
-          marketResponse.json(),
-          weatherResponse.json(),
-          scheduleResponse.json(),
-        ]);
-        setMarketData(market);
-        setWeatherData(weather);
-        setScheduleData(schedule);
-
-        if (!analysisResponse.ok || !analysis.success) {
-          throw new Error(analysis.message || "NPB 분석을 불러오지 못했습니다.");
+        // 1차: 선발 상세를 제외한 핵심 팀 승률·타선·최근 기록을 먼저 표시
+        const fastResponse = await fetch(dataCacheUrl(`${analysisBase}&fast=1`, 600), baseOptions);
+        const fastAnalysis = await fastResponse.json();
+        if (!fastResponse.ok || !fastAnalysis.success) {
+          throw new Error(fastAnalysis.message || "NPB 분석을 불러오지 못했습니다.");
+        }
+        if (active) {
+          setData(fastAnalysis);
+          writeSessionCache(fastAnalysis);
         }
 
-        setData({
-          ...analysis,
-          awayRecent: awayRecent.success ? awayRecent : null,
-          homeRecent: homeRecent.success ? homeRecent : null,
-          headToHead: headToHead.success ? headToHead : null,
-        });
+        // 2차: 투수 최근 등판·상대전·구장 기록을 뒤에서 추가
+        const fullResponse = await fetch(dataCacheUrl(analysisBase, 600), baseOptions);
+        const fullAnalysis = await fullResponse.json();
+        if (fullResponse.ok && fullAnalysis.success && active) {
+          setData(fullAnalysis);
+          writeSessionCache(fullAnalysis);
+        }
       } catch (loadError) {
         if (loadError instanceof Error && loadError.name === "AbortError") return;
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "NPB 분석을 불러오지 못했습니다.",
-        );
+        if (!cached && active) {
+          setError(loadError instanceof Error ? loadError.message : "NPB 분석을 불러오지 못했습니다.");
+        }
       }
     }
 
     loadAll();
-    return () => controller.abort();
-  }, [away, home, date, stadium]);
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [away, home, date, stadium, awayStarter, homeStarter]);
 
   const season = data ? advantageLabel(data.scores.season, away, home) : null;
   const batting = data ? advantageLabel(data.scores.batting, away, home) : null;
