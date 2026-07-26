@@ -242,7 +242,15 @@ export default function ContentPage() {
 
 
       if (hasAudio) destination.stream.getAudioTracks().forEach((track) => combined.addTrack(track));
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ? "video/webm;codecs=vp8,opus" : "video/webm";
+      const mimeCandidates = [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4;codecs=avc1,mp4a.40.2",
+        "video/mp4",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ];
+      const mimeType = mimeCandidates.find((value) => MediaRecorder.isTypeSupported(value)) || "video/webm";
       const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 1_400_000, audioBitsPerSecond: 96_000 });
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
@@ -290,8 +298,9 @@ export default function ContentPage() {
       if (reelUrl) URL.revokeObjectURL(reelUrl);
       const url = URL.createObjectURL(blob); objectUrls.push(url);
       setReelBlob(blob); setReelUrl(url); setReelProgress(100);
-      setYoutubeFile(new File([blob], `sports-ai-${data.league}-${data.away}-${data.home}-reels.webm`, { type: blob.type || "video/webm" }));
-      setAutomationMessage("릴스 생성 완료. 미리보기에서 확인한 뒤 WebM 영상으로 저장하거나 유튜브 업로드에 사용할 수 있습니다.");
+      const reelExtension = (blob.type || mimeType).includes("mp4") ? "mp4" : "webm";
+      setYoutubeFile(new File([blob], `sports-ai-${data.league}-${data.away}-${data.home}-reels.${reelExtension}`, { type: blob.type || mimeType }));
+      setAutomationMessage(reelExtension === "mp4" ? "릴스 생성 완료. YouTube와 Instagram 자동 업로드에 사용할 수 있습니다." : "릴스 생성 완료. 현재 브라우저는 WebM만 지원하므로 YouTube 업로드는 가능하지만 Instagram은 MP4 생성이 가능한 최신 Chrome에서 다시 생성해야 합니다.");
       objectUrls = [];
     } catch (error) {
       setAutomationMessage(error instanceof Error ? error.message : "릴스 영상 생성에 실패했습니다.");
@@ -306,7 +315,8 @@ export default function ContentPage() {
     if (!reelBlob || !reelUrl) return;
     const link = document.createElement("a");
     link.href = reelUrl;
-    link.download = `sports-ai-${data.league}-${data.away}-${data.home}-reels.webm`;
+    const reelExtension = reelBlob.type.includes("mp4") ? "mp4" : "webm";
+    link.download = `sports-ai-${data.league}-${data.away}-${data.home}-reels.${reelExtension}`;
     link.click();
   }
 
@@ -375,7 +385,8 @@ export default function ContentPage() {
       const form = new FormData();
       form.set("payload", JSON.stringify(payload));
       if (reelBlob) {
-        form.set("media", new File([reelBlob], `sports-ai-${data.league}-${data.away}-vs-${data.home}.webm`, { type: reelBlob.type || "video/webm" }));
+        const reelExtension = reelBlob.type.includes("mp4") ? "mp4" : "webm";
+        form.set("media", new File([reelBlob], `sports-ai-${data.league}-${data.away}-vs-${data.home}.${reelExtension}`, { type: reelBlob.type || (reelExtension === "mp4" ? "video/mp4" : "video/webm") }));
       }
       const response = await fetch("/api/content/telegram", { method: "POST", body: form });
       const json = await response.json();
@@ -484,7 +495,7 @@ export default function ContentPage() {
             <button type="button" onClick={makeReel} disabled={makingReel} className="rounded-xl bg-violet-600 px-4 py-3 font-black disabled:opacity-50">{makingReel ? `릴스 생성 중 ${reelProgress}%` : "9:16 릴스 만들기"}</button>
           </div>
           {makingReel && <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full bg-violet-500" style={{width:`${reelProgress}%`}} /></div>}
-          {reelUrl && <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-900 p-4"><video src={reelUrl} controls playsInline className="pointer-events-none mx-auto max-h-[620px] w-full max-w-sm rounded-xl bg-black"/><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={saveReel} className="rounded-xl bg-emerald-600 px-4 py-3 font-black">영상 저장</button><button type="button" onPointerDown={(event)=>{event.stopPropagation();}} onClick={(event)=>{event.preventDefault(); event.stopPropagation(); try { if (reelBlob) { const file = new File([reelBlob], `sports-ai-${data.league}-${data.away}-vs-${data.home}.webm`, {type: reelBlob.type || "video/webm"}); setYoutubeFile(file); setAutomationMessage(`유튜브 업로드 파일 연결 완료: ${file.name}`); } else { setAutomationMessage("버튼 클릭 확인: 릴스 파일 상태가 없습니다."); } } catch(error) { setAutomationMessage("유튜브 연결 오류가 발생했습니다."); } }} className="relative z-50 cursor-pointer rounded-xl border border-slate-700 px-4 py-3 font-black">유튜브에 사용</button></div></div>}
+          {reelUrl && <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-900 p-4"><video src={reelUrl} controls playsInline className="pointer-events-none mx-auto max-h-[620px] w-full max-w-sm rounded-xl bg-black"/><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" onClick={saveReel} className="rounded-xl bg-emerald-600 px-4 py-3 font-black">영상 저장</button><button type="button" onPointerDown={(event)=>{event.stopPropagation();}} onClick={(event)=>{event.preventDefault(); event.stopPropagation(); try { if (reelBlob) { const ext = reelBlob.type.includes("mp4") ? "mp4" : "webm"; const file = new File([reelBlob], `sports-ai-${data.league}-${data.away}-vs-${data.home}.${ext}`, {type: reelBlob.type || (ext === "mp4" ? "video/mp4" : "video/webm")}); setYoutubeFile(file); setAutomationMessage(`유튜브 업로드 파일 연결 완료: ${file.name}`); } else { setAutomationMessage("버튼 클릭 확인: 릴스 파일 상태가 없습니다."); } } catch(error) { setAutomationMessage("유튜브 연결 오류가 발생했습니다."); } }} className="relative z-50 cursor-pointer rounded-xl border border-slate-700 px-4 py-3 font-black">유튜브에 사용</button></div></div>}
           <textarea value={caption} onChange={(event)=>setCaption(event.target.value)} placeholder="캡션 자동 생성 버튼을 누르세요." className="mt-3 min-h-52 w-full rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm leading-6 outline-none" />
           <div className="mt-4 grid grid-cols-3 gap-2 text-sm font-bold">
             {([['instagram','인스타'],['youtube','유튜브'],['tiktok','틱톡']] as const).map(([key,label])=><label key={key} className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 p-3"><input type="checkbox" checked={platforms[key]} onChange={(e)=>setPlatforms((prev)=>({...prev,[key]:e.target.checked}))}/>{label}</label>)}

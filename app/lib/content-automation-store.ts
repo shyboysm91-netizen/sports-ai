@@ -17,6 +17,9 @@ export type ApprovalRecord = {
   mimeType?: string;
   youtubeVideoId?: string;
   youtubeUrl?: string;
+  instagramMediaId?: string;
+  instagramUrl?: string;
+  instagramError?: string;
   error?: string;
   createdAt: string;
   updatedAt: string;

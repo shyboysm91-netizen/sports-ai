@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getValidToken } from "@/app/lib/youtube-oauth";
+import { publishInstagramReel } from "@/app/lib/instagram-publisher";
 import { readApproval, updateApproval } from "@/app/lib/content-automation-store";
 
 export const dynamic = "force-dynamic";
@@ -23,9 +24,13 @@ function safeEqual(a: string, b: string) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char] || char));
+}
+
 function page(title: string, message: string, ok: boolean) {
   const accent = ok ? "#22c55e" : "#ef4444";
-  return new NextResponse(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head><body style="margin:0;background:#070b12;color:#fff;font-family:Arial,sans-serif"><main style="max-width:560px;margin:80px auto;padding:24px"><section style="border:1px solid #263244;background:#111827;border-radius:24px;padding:30px"><div style="font-size:44px">${ok ? "✅" : "❌"}</div><h1 style="margin:18px 0 12px;color:${accent}">${title}</h1><p style="line-height:1.7;color:#cbd5e1">${message}</p><a href="/content" style="display:block;margin-top:24px;padding:14px;text-align:center;border-radius:12px;background:#2563eb;color:#fff;text-decoration:none;font-weight:800">콘텐츠 제작 화면으로 돌아가기</a></section></main></body></html>`, { status: ok ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  return new NextResponse(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head><body style="margin:0;background:#070b12;color:#fff;font-family:Arial,sans-serif"><main style="max-width:560px;margin:80px auto;padding:24px"><section style="border:1px solid #263244;background:#111827;border-radius:24px;padding:30px"><div style="font-size:44px">${ok ? "✅" : "❌"}</div><h1 style="margin:18px 0 12px;color:${accent}">${escapeHtml(title)}</h1><p style="line-height:1.7;color:#cbd5e1">${message}</p><a href="/content" style="display:block;margin-top:24px;padding:14px;text-align:center;border-radius:12px;background:#2563eb;color:#fff;text-decoration:none;font-weight:800">콘텐츠 제작 화면으로 돌아가기</a></section></main></body></html>`, { status: ok ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
 async function notify(text: string) {
@@ -68,11 +73,25 @@ async function uploadYoutube(buffer: Buffer, title: string, description: string,
   if (!init.ok) throw new Error(`YouTube 업로드 준비 실패: ${await init.text()}`);
   const uploadUrl = init.headers.get("location");
   if (!uploadUrl) throw new Error("YouTube 업로드 주소를 받지 못했습니다.");
-  const uploadBody = new Uint8Array(buffer);
-  const upload = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": mimeType }, body: uploadBody });
+  const upload = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": mimeType }, body: new Uint8Array(buffer) });
   const result = await upload.json().catch(() => ({}));
   if (!upload.ok || !result?.id) throw new Error(`YouTube 업로드 실패: ${JSON.stringify(result)}`);
   return { videoId: String(result.id), url: `https://www.youtube.com/watch?v=${result.id}` };
+}
+
+function publicMediaUrl(request: NextRequest, approvalId: string, secret: string) {
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin).replace(/\/$/, "");
+  const exp = String(Date.now() + 30 * 60 * 1000);
+  const sig = sign(`${approvalId}.${exp}`, secret);
+  return `${siteUrl}/api/content/media/${encodeURIComponent(approvalId)}?exp=${encodeURIComponent(exp)}&sig=${encodeURIComponent(sig)}`;
+}
+
+function completedForPlatforms(approval: Awaited<ReturnType<typeof readApproval>>) {
+  if (!approval) return false;
+  const platforms = approval.platforms || [];
+  const youtubeDone = !platforms.includes("youtube") || Boolean(approval.youtubeUrl);
+  const instagramDone = !platforms.includes("instagram") || Boolean(approval.instagramMediaId);
+  return youtubeDone && instagramDone;
 }
 
 export async function GET(request: NextRequest) {
@@ -95,39 +114,82 @@ export async function GET(request: NextRequest) {
   if (!approval) return page("승인 실패", "저장된 승인 데이터를 찾지 못했습니다.", false);
 
   if (action === "cancel") {
-    if (approval.status === "published") return page("취소 불가", "이미 YouTube에 업로드된 콘텐츠입니다.", false);
+    if (approval.status === "published") return page("취소 불가", "이미 업로드된 콘텐츠입니다.", false);
     await updateApproval(payload.approvalId, { status: "cancelled" });
     await notify(`❌ 발행 취소\n${approval.league} ${approval.title}\n${approval.date}`);
-    return page("발행 취소 완료", `${approval.title} 콘텐츠 발행을 취소했습니다.`, false);
+    return page("발행 취소 완료", `${escapeHtml(approval.title)} 콘텐츠 발행을 취소했습니다.`, false);
   }
   if (action !== "approve") return page("처리 실패", "지원하지 않는 작업입니다.", false);
 
-  if (approval.status === "published" && approval.youtubeUrl) {
-    return page("이미 업로드 완료", `${approval.title} 영상은 이미 YouTube에 업로드되었습니다.<br><br>${approval.youtubeUrl}`, true);
+  if (completedForPlatforms(approval)) {
+    const links = [approval.youtubeUrl, approval.instagramUrl].filter(Boolean).map((value) => escapeHtml(String(value))).join("<br>");
+    return page("이미 업로드 완료", `${escapeHtml(approval.title)} 콘텐츠는 이미 업로드되었습니다.<br><br>${links}`, true);
   }
   if (approval.status === "uploading") return page("업로드 진행 중", "이미 업로드가 시작되었습니다. 잠시 후 텔레그램 완료 메시지를 확인하세요.", true);
   if (approval.status === "cancelled") return page("승인 불가", "이미 취소된 발행 요청입니다.", false);
-  if (!(approval.platforms || []).includes("youtube")) return page("승인 완료", "YouTube가 업로드 플랫폼으로 선택되지 않았습니다.", true);
   if (!approval.telegramFileId) return page("업로드 실패", "저장된 영상 파일 정보가 없습니다. 릴스를 포함해 다시 승인 요청을 보내세요.", false);
 
-  await updateApproval(payload.approvalId, { status: "uploading", error: undefined });
-  await notify(`⏳ YouTube Shorts 업로드 시작\n${approval.league} ${approval.title}`);
+  const platforms = approval.platforms || [];
+  const wantsYoutube = platforms.includes("youtube");
+  const wantsInstagram = platforms.includes("instagram");
+  if (!wantsYoutube && !wantsInstagram) return page("승인 완료", "자동 업로드가 가능한 플랫폼이 선택되지 않았습니다.", true);
 
-  try {
-    const video = await downloadTelegramFile(approval.telegramFileId);
-    const uploaded = await uploadYoutube(video, `${approval.title} Sports AI 분석`, approval.description, approval.mimeType || "video/webm", approval.privacyStatus || "private");
-    await updateApproval(payload.approvalId, {
-      status: "published",
-      youtubeVideoId: uploaded.videoId,
-      youtubeUrl: uploaded.url,
-      error: undefined,
-    });
-    await notify(`✅ YouTube Shorts 업로드 완료\n${approval.league} ${approval.title}\n${uploaded.url}`);
-    return page("YouTube 업로드 완료", `${approval.title} 영상이 YouTube에 등록되었습니다.<br><br>${uploaded.url}`, true);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "알 수 없는 업로드 오류";
-    await updateApproval(payload.approvalId, { status: "failed", error: message });
-    await notify(`❌ YouTube 업로드 실패\n${approval.league} ${approval.title}\n${message}`);
-    return page("YouTube 업로드 실패", message, false);
+  await updateApproval(payload.approvalId, { status: "uploading", error: undefined, instagramError: undefined });
+  await notify(`⏳ 자동 업로드 시작\n${approval.league} ${approval.title}\n플랫폼: ${[wantsYoutube && "YouTube", wantsInstagram && "Instagram"].filter(Boolean).join(", ")}`);
+
+  const successes: string[] = [];
+  const failures: string[] = [];
+  let video: Buffer | null = null;
+
+  if (wantsYoutube && !approval.youtubeUrl) {
+    try {
+      video = video || await downloadTelegramFile(approval.telegramFileId);
+      const uploaded = await uploadYoutube(video, `${approval.title} Sports AI 분석`, approval.description, approval.mimeType || "video/mp4", approval.privacyStatus || "private");
+      await updateApproval(payload.approvalId, { youtubeVideoId: uploaded.videoId, youtubeUrl: uploaded.url });
+      successes.push(`YouTube: ${uploaded.url}`);
+    } catch (error) {
+      failures.push(`YouTube: ${error instanceof Error ? error.message : "업로드 실패"}`);
+    }
+  } else if (wantsYoutube && approval.youtubeUrl) {
+    successes.push(`YouTube: ${approval.youtubeUrl}`);
   }
+
+  if (wantsInstagram && !approval.instagramMediaId) {
+    try {
+      const mimeType = (approval.mimeType || "").toLowerCase();
+      const fileName = (approval.fileName || "").toLowerCase();
+      if (!mimeType.includes("mp4") && !fileName.endsWith(".mp4") && !fileName.endsWith(".mov")) {
+        throw new Error("Instagram은 MP4 또는 MOV 영상만 게시할 수 있습니다. 최신 버전에서 릴스를 새로 생성해 주세요.");
+      }
+      const mediaUrl = publicMediaUrl(request, payload.approvalId, secret);
+      const caption = [approval.description, approval.hashtags].filter(Boolean).join("\n\n");
+      const uploaded = await publishInstagramReel({ videoUrl: mediaUrl, caption });
+      await updateApproval(payload.approvalId, { instagramMediaId: uploaded.mediaId, instagramUrl: uploaded.url, instagramError: undefined });
+      successes.push(`Instagram: ${uploaded.url}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "업로드 실패";
+      await updateApproval(payload.approvalId, { instagramError: message });
+      failures.push(`Instagram: ${message}`);
+    }
+  } else if (wantsInstagram && approval.instagramMediaId) {
+    successes.push(`Instagram: ${approval.instagramUrl || "게시 완료"}`);
+  }
+
+  const finalStatus = failures.length ? "failed" : "published";
+  const combinedError = failures.join("\n");
+  await updateApproval(payload.approvalId, { status: finalStatus, error: combinedError || undefined });
+
+  const resultText = [
+    failures.length ? "⚠️ 자동 업로드 일부 실패" : "✅ 자동 업로드 완료",
+    `${approval.league} ${approval.title}`,
+    ...successes,
+    ...failures.map((value) => `❌ ${value}`),
+  ].join("\n");
+  await notify(resultText);
+
+  const html = [
+    successes.length ? `<strong>완료</strong><br>${successes.map((value) => escapeHtml(value)).join("<br>")}` : "",
+    failures.length ? `<br><br><strong>실패</strong><br>${failures.map((value) => escapeHtml(value)).join("<br>")}` : "",
+  ].join("");
+  return page(failures.length ? "자동 업로드 일부 실패" : "자동 업로드 완료", html, failures.length === 0);
 }
