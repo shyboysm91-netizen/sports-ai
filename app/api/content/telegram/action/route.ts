@@ -68,7 +68,8 @@ async function uploadYoutube(buffer: Buffer, title: string, description: string,
   if (!init.ok) throw new Error(`YouTube 업로드 준비 실패: ${await init.text()}`);
   const uploadUrl = init.headers.get("location");
   if (!uploadUrl) throw new Error("YouTube 업로드 주소를 받지 못했습니다.");
-  const upload = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": mimeType }, body: buffer });
+  const uploadBody = new Uint8Array(buffer);
+  const upload = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": mimeType }, body: uploadBody });
   const result = await upload.json().catch(() => ({}));
   if (!upload.ok || !result?.id) throw new Error(`YouTube 업로드 실패: ${JSON.stringify(result)}`);
   return { videoId: String(result.id), url: `https://www.youtube.com/watch?v=${result.id}` };
