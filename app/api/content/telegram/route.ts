@@ -1,12 +1,12 @@
-import { createHmac } from "crypto";
+import { createHmac, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { saveApproval, updateApproval } from "@/app/lib/content-automation-store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const TELEGRAM_FILE_LIMIT = 50 * 1024 * 1024;
+// Vercel 함수 요청 본문 제한보다 여유 있게 낮춥니다.
+const SERVER_UPLOAD_LIMIT = 4 * 1024 * 1024;
 
 type Payload = {
   league?: string;
@@ -59,6 +59,7 @@ async function telegramJson(botToken: string, method: string, body: object) {
 }
 
 export async function POST(request: NextRequest) {
+  let approvalId = "";
   try {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -67,13 +68,20 @@ export async function POST(request: NextRequest) {
     }
 
     const { body, media } = await readRequest(request);
+    if (!media) {
+      return NextResponse.json({ success: false, message: "생성된 릴스 파일이 없습니다. 릴스를 다시 생성한 뒤 승인 요청을 보내세요." }, { status: 400 });
+    }
+    if (media.size > SERVER_UPLOAD_LIMIT) {
+      return NextResponse.json({ success: false, message: `릴스 용량이 ${(media.size / 1024 / 1024).toFixed(1)}MB라 서버 전송 한도를 넘습니다. 새 버전에서 릴스를 다시 생성해 주세요.` }, { status: 413 });
+    }
+
     const title = body.title || `${body.away || "원정팀"} vs ${body.home || "홈팀"}`;
     const platforms = Array.isArray(body.platforms)
       ? body.platforms
       : String(body.platforms || "").split(",").filter(Boolean);
     const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin).replace(/\/$/, "");
     const secret = process.env.CONTENT_APPROVAL_SECRET || botToken;
-    const approvalId = randomUUID();
+    approvalId = randomUUID();
     const payload = encode({
       approvalId,
       league: body.league || "-",
@@ -105,17 +113,27 @@ export async function POST(request: NextRequest) {
       "",
       body.caption || "캡션 없음",
       "",
-      "내용을 확인한 뒤 발행 승인 또는 취소를 누르세요.",
+      "영상을 확인한 뒤 아래 버튼을 누르세요.",
     ].join("\n");
-
-    if (media && media.size > TELEGRAM_FILE_LIMIT) {
-      return NextResponse.json({ success: false, message: "텔레그램 미리보기 파일은 50MB 이하여야 합니다." }, { status: 413 });
-    }
 
     const privacyStatus = ["private", "unlisted", "public"].includes(String(body.privacyStatus))
       ? body.privacyStatus as "private" | "unlisted" | "public"
       : "private";
     const now = new Date().toISOString();
+
+    // 먼저 영상을 텔레그램에 올립니다. 이때는 승인 버튼을 붙이지 않습니다.
+    const form = new FormData();
+    form.set("chat_id", chatId);
+    form.set("document", media, media.name || "sports-ai-reel.webm");
+    form.set("caption", cleanCaption(summary));
+    const videoResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, { method: "POST", body: form });
+    const videoResult = await videoResponse.json();
+    if (!videoResponse.ok || !videoResult?.ok) throw new Error(videoResult?.description || "텔레그램 영상 전송 실패");
+
+    const telegramFileId = videoResult?.result?.document?.file_id || videoResult?.result?.video?.file_id || "";
+    if (!telegramFileId) throw new Error("텔레그램 영상 file_id를 받지 못했습니다.");
+
+    // 영상 file_id까지 포함한 완전한 승인 데이터를 저장합니다.
     const stored = await saveApproval({
       approvalId,
       league: body.league || "-",
@@ -128,54 +146,34 @@ export async function POST(request: NextRequest) {
       platforms,
       privacyStatus,
       status: "waiting",
-      fileName: media?.name || undefined,
-      mimeType: media?.type || undefined,
+      telegramFileId,
+      fileName: media.name || "sports-ai-reel.webm",
+      mimeType: media.type || "video/webm",
       createdAt: now,
       updatedAt: now,
     });
-    if (!stored) throw new Error("승인 데이터를 서버 DB에 저장하지 못했습니다. Supabase 연결 상태를 확인하세요.");
+    if (!stored) throw new Error("영상 승인 데이터를 서버 DB에 저장하지 못했습니다. Supabase 연결 상태를 확인하세요.");
 
-    try {
-      if (media) {
-        const form = new FormData();
-        form.set("chat_id", chatId);
-        form.set("document", media, media.name || "sports-ai-reel.webm");
-        form.set("caption", cleanCaption(summary));
-        form.set("reply_markup", JSON.stringify(keyboard));
-        const response = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, { method: "POST", body: form });
-        const result = await response.json();
-        if (!response.ok || !result?.ok) throw new Error(result?.description || "텔레그램 영상 전송 실패");
-        const telegramFileId = result?.result?.document?.file_id || result?.result?.video?.file_id || "";
-        if (!telegramFileId) throw new Error("텔레그램 영상 file_id를 받지 못했습니다.");
-        const updated = await updateApproval(approvalId, {
-          telegramFileId,
-          fileName: media.name || "sports-ai-reel.webm",
-          mimeType: media.type || "video/webm",
-        });
-        if (!updated) throw new Error("텔레그램 영상 정보를 승인 데이터에 저장하지 못했습니다.");
-      } else {
-        await telegramJson(botToken, "sendMessage", {
-          chat_id: chatId,
-          text: summary,
-          disable_web_page_preview: true,
-          reply_markup: keyboard,
-        });
-      }
-    } catch (error) {
-      await updateApproval(approvalId, {
-        status: "failed",
-        error: error instanceof Error ? error.message : "텔레그램 전송 실패",
-      });
-      throw error;
-    }
+    // 저장이 끝난 뒤에만 승인 버튼을 별도 메시지로 전송합니다.
+    await telegramJson(botToken, "sendMessage", {
+      chat_id: chatId,
+      text: `✅ 영상 저장 완료\n${body.league || "-"} ${title}\n발행 승인 또는 취소를 선택하세요.`,
+      disable_web_page_preview: true,
+      reply_markup: keyboard,
+    });
 
     return NextResponse.json({
       success: true,
-      message: media
-        ? "릴스 파일과 발행 승인 버튼을 텔레그램으로 보냈습니다. 승인 링크는 24시간 동안 유효합니다."
-        : "발행 승인 요청을 텔레그램으로 보냈습니다. 릴스를 먼저 만들면 영상 파일도 함께 전송됩니다.",
+      approvalId,
+      message: "릴스 영상과 발행 승인 버튼을 텔레그램으로 보냈습니다. 승인 링크는 24시간 동안 유효합니다.",
     });
   } catch (error) {
+    if (approvalId) {
+      await updateApproval(approvalId, {
+        status: "failed",
+        error: error instanceof Error ? error.message : "텔레그램 전송 실패",
+      }).catch(() => false);
+    }
     return NextResponse.json({ success: false, message: error instanceof Error ? error.message : "텔레그램 전송 실패" }, { status: 500 });
   }
 }

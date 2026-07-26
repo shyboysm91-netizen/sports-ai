@@ -243,7 +243,7 @@ export default function ContentPage() {
 
       if (hasAudio) destination.stream.getAudioTracks().forEach((track) => combined.addTrack(track));
       const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ? "video/webm;codecs=vp8,opus" : "video/webm";
-      const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 7_000_000, audioBitsPerSecond: 160_000 });
+      const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 1_400_000, audioBitsPerSecond: 96_000 });
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
       const finished = new Promise<Blob>((resolve, reject) => {
@@ -352,7 +352,16 @@ export default function ContentPage() {
   }
 
   async function sendTelegram() {
-    setSendingTelegram(true); setAutomationMessage("텔레그램으로 미리보기를 보내는 중입니다.");
+    if (!reelBlob) {
+      setAutomationMessage("릴스를 먼저 생성한 뒤 승인 요청을 보내세요.");
+      return;
+    }
+    const telegramUploadLimit = 4 * 1024 * 1024;
+    if (reelBlob.size > telegramUploadLimit) {
+      setAutomationMessage(`현재 릴스 용량이 ${(reelBlob.size / 1024 / 1024).toFixed(1)}MB라 서버 전송 한도를 넘습니다. 새 버전에서 릴스를 다시 생성한 뒤 보내세요.`);
+      return;
+    }
+    setSendingTelegram(true); setAutomationMessage("텔레그램으로 릴스와 승인 요청을 보내는 중입니다.");
     try {
       const chosen = Object.entries(platforms).filter(([, value]) => value).map(([key]) => key).join(",");
       const params = new URLSearchParams({ league: data.league, date: data.date, away: data.away, home: data.home, platforms: chosen });
