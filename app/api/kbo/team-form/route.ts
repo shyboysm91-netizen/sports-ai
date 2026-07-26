@@ -12,6 +12,7 @@ type ParsedGame = {
   home: string;
   homeScore: number;
   stadium: string;
+  phase?: string;
 };
 
 type TeamGame = {
@@ -173,6 +174,9 @@ function parseNaverGames(payload: unknown, fallbackDate: string): ParsedGame[] {
     const stadium = pick(obj, ["stadiumName", "place", "groundName", "venueName"])
       || pick(stadiumObj, ["name", "stadiumName"]);
 
+    const phase = pick(obj, ["gameTypeName", "gameType", "seasonType", "seasonTypeName", "leagueName", "categoryName", "gameCategoryName"]);
+    if (/시범|연습|exhibition|preseason|spring/i.test(phase)) continue;
+
     const key = `${date}-${awayCode}-${homeCode}-${awayScore}-${homeScore}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -187,6 +191,7 @@ function parseNaverGames(payload: unknown, fallbackDate: string): ParsedGame[] {
       home: TEAM_NAMES[homeCode],
       homeScore,
       stadium,
+      phase,
     });
   }
 
@@ -342,8 +347,11 @@ export async function GET(request: Request) {
       return fetchOfficialMonth(year, month);
     }));
 
+    const regularSeasonFloor = `${year}-03-20`;
     const allCompletedGames = monthResults
       .flat()
+      .filter((game) => game.date >= regularSeasonFloor)
+      .filter((game) => !/시범|연습|exhibition|preseason|spring/i.test(game.phase || ""))
       .filter((game) => game.date < date)
       .filter((game, index, array) => array.findIndex((item) =>
         `${item.date}-${item.awayCode}-${item.homeCode}-${item.awayScore}-${item.homeScore}` ===

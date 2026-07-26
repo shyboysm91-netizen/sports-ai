@@ -57,6 +57,8 @@ export function outsToInnings(outs: number) {
 
 
 const JAPANESE_NAME_OVERRIDES: Record<string, string> = {
+  "吉村 貢司郎": "요시무라 고지로",
+  "森 翔平": "모리 쇼헤이",
   "西舘 昂汰": "니시다테 코타",
   "栗林 良吏": "구리바야시 료지",
   "涌井 秀章": "와쿠이 히데아키",
@@ -71,6 +73,17 @@ const JAPANESE_NAME_OVERRIDES: Record<string, string> = {
   "廣池 康志郎": "히로이케 코시로",
   "アドゥワ 誠": "아두와 마코토",
   "高橋 奎二": "다카하시 게이지",
+  "金丸 夢斗": "카네마루 유메토",
+  "尾形 崇斗": "오가타 슈토",
+  "村上 頌樹": "무라카미 쇼키",
+  "小笠原 慎之介": "오가사와라 신노스케",
+  "山﨑 福也": "야마사키 사치야",
+  "瀧中 瞭太": "다키나카 료타",
+  "髙橋 光成": "다카하시 코나",
+  "前田 悠伍": "마에다 유고",
+  "九里 亜蓮": "구리 아렌",
+  "A.ジャクソン": "안드레 잭슨",
+  "Ａ．ジャクソン": "안드레 잭슨",
 };
 
 export function normalizePitcherName(value: string) {

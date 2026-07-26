@@ -31,6 +31,7 @@ export const MLB_TEAM_KO_BY_EN: Record<string, string> = {
 };
 
 const PLAYER_NAME_KO: Record<string, string> = {
+  "Tomoyuki Sugano": "스가노 도모유키", "Shane Drohan": "셰인 드로한", "Simeon Drohan": "셰인 드로한",
   "Joe Ryan": "조 라이언", "Tanner Bibee": "태너 바이비", "Sean Burke": "션 버크",
   "Trey Yesavage": "트레이 예세비지", "Shohei Ohtani": "오타니 쇼헤이",
   "Yoshinobu Yamamoto": "야마모토 요시노부", "Shota Imanaga": "이마나가 쇼타",
@@ -88,7 +89,7 @@ const LAST: Record<string, string> = {
   abbott:"애벗", alcantara:"알칸타라", perez:"페레스", gore:"고어", taillon:"타이욘", morton:"모턴",
   kimbrel:"킴브럴", jansen:"잰슨", hader:"헤이더", clase:"클라세", helsley:"헬슬리", cole:"콜",
   kershaw:"커쇼", scherzer:"슈어저", verlander:"벌랜더", burnes:"번스", ragans:"레이건스", lugo:"루고",
-  rodon:"로돈", cortes:"코르테스", eovaldi:"이볼디", degrom:"디그롬", kelly:"켈리",
+  rodon:"로돈", cortes:"코르테스", eovaldi:"이볼디", degrom:"디그롬", kelly:"켈리", sugano:"스가노", drohan:"드로한",
 };
 
 export function teamNameKo(name: string, id?: number) {

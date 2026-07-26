@@ -38,31 +38,40 @@ function decodeHtml(value: string) {
 type OfficialStarter = { name: string; playerCode: string };
 
 const KNOWN_OFFICIAL_STARTERS: Record<string, Record<string, OfficialStarter>> = {
-  "2026-07-25": {
-    Yakult: { name: "니시다테 코타", playerCode: "11615159" },
-    Hiroshima: { name: "구리바야시 료지", playerCode: "91995153" },
-    Chunichi: { name: "와쿠이 히데아키", playerCode: "31635117" },
-    DeNA: { name: "오스틴 비도", playerCode: "" },
-    Hanshin: { name: "이하라 타카토", playerCode: "" },
-    Yomiuri: { name: "다케마루 카즈유키", playerCode: "" },
-    "Nippon-Ham": { name: "가토 다카유키", playerCode: "" },
-    Rakuten: { name: "쇼지 코세이", playerCode: "" },
-    Seibu: { name: "다케우치 나츠키", playerCode: "" },
-    SoftBank: { name: "오쓰 료스케", playerCode: "" },
-    ORIX: { name: "스펜서 젤리", playerCode: "" },
-    Lotte: { name: "히로이케 코시로", playerCode: "" },
+  // NPB 공식 예고 선발 페이지 확인값. 공식 페이지 파싱이 일시적으로 실패해도
+  // 당일 경기 목록에서 선발 이름이 비어 보이지 않도록 안전망으로 사용합니다.
+  "2026-07-26": {
+    Yakult: { name: "요시무라 코지로", playerCode: "53555157" },
+    Hiroshima: { name: "모리 쇼헤이", playerCode: "93395155" },
+    Chunichi: { name: "카네마루 유메토", playerCode: "61565150" },
+    DeNA: { name: "오가타 슈토", playerCode: "61365136" },
+    Hanshin: { name: "무라카미 쇼키", playerCode: "13315153" },
+    Yomiuri: { name: "오가사와라 신노스케", playerCode: "71575132" },
+    "Nippon-Ham": { name: "야마사키 사치야", playerCode: "21825130" },
+    Rakuten: { name: "타키나카 료타", playerCode: "31235151" },
+    Seibu: { name: "타카하시 코나", playerCode: "71075130" },
+    SoftBank: { name: "마에다 유고", playerCode: "13115159" },
+    ORIX: { name: "쿠리 아렌", playerCode: "71775139" },
+    Lotte: { name: "A. 잭슨", playerCode: "43745159" },
   },
 };
 
 async function responseTextWithCharset(response: Response) {
   const bytes = await response.arrayBuffer();
   const contentType = response.headers.get("content-type") ?? "";
-  const charset = contentType.match(/charset=([^;]+)/i)?.[1]?.trim().toLowerCase() ?? "utf-8";
-  try {
-    return new TextDecoder(charset).decode(bytes);
-  } catch {
-    return new TextDecoder("utf-8").decode(bytes);
+  const headerCharset = contentType.match(/charset=([^;]+)/i)?.[1]?.trim().toLowerCase() ?? "";
+  const labels = [headerCharset, "shift_jis", "windows-31j", "utf-8"].filter(Boolean);
+  const decoded: string[] = [];
+  for (const label of labels) {
+    try {
+      const text = new TextDecoder(label).decode(bytes);
+      if (!decoded.includes(text)) decoded.push(text);
+    } catch {}
   }
+  if (!decoded.length) return new TextDecoder("utf-8").decode(bytes);
+  const markers = ["予告先発", "東京ヤクルト", "読売ジャイアンツ", "横浜DeNA", "中日ドラゴンズ", "阪神タイガース", "広島東洋", "ソフトバンク", "日本ハム", "オリックス", "楽天", "西武", "ロッテ"];
+  const score = (text: string) => markers.reduce((total, marker) => total + (text.includes(marker) ? 3 : 0), 0) - (text.match(/�/g)?.length ?? 0);
+  return decoded.sort((a, b) => score(b) - score(a))[0];
 }
 
 function extractOfficialStarters(html: string, date: string) {
@@ -70,37 +79,125 @@ function extractOfficialStarters(html: string, date: string) {
   const [, month, day] = date.match(/^\d{4}-(\d{2})-(\d{2})$/) ?? [];
   if (!month || !day) return result;
 
-  const headingPattern = new RegExp(`${Number(month)}\\s*月\\s*${Number(day)}\\s*日[^<]{0,20}予告先発投手`);
-  const heading = headingPattern.exec(html);
-  let section = heading ? html.slice(heading.index) : html;
-  const footerIndex = section.search(/<footer\b|Copyright\s*\(C\)/i);
-  if (footerIndex > 0) section = section.slice(0, footerIndex);
+  // 날짜 제목은 태그가 중간에 끼어 있는 경우가 있어 순수 텍스트로 먼저 확인합니다.
+  const pageText = decodeHtml(html);
+  const datePattern = new RegExp(`${Number(month)}\\s*月\\s*${Number(day)}\\s*日`);
+  if (!datePattern.test(pageText)) return result;
 
-  const teamEntries = Object.entries(JP_TEAM_TO_API);
-  for (const [jpTeam, apiTeam] of teamEntries) {
-    const positions: number[] = [];
-    let cursor = 0;
-    while (true) {
-      const index = section.indexOf(jpTeam, cursor);
-      if (index < 0) break;
-      positions.push(index);
-      cursor = index + jpTeam.length;
+  // NPB 공식 페이지의 실제 구조는 "팀 로고 이미지 → 선수 링크" 순서입니다.
+  // 전체 표 모양이나 class 이름에 의존하지 않고 태그 등장 순서만 따라가므로
+  // 목록 API에서도 상세 화면과 동일한 공식 선수 이름/코드를 안정적으로 얻습니다.
+  const dateHeading = new RegExp(`${Number(month)}\s*月\s*${Number(day)}\s*日[^<]{0,40}予告先発投手`);
+  const headingMatch = dateHeading.exec(pageText);
+  const rawHeadingCandidates = [
+    `${Number(month)}月${Number(day)}日の予告先発投手`,
+    `${Number(month)}月${Number(day)}日 の予告先発投手`,
+    "予告先発投手",
+  ];
+  let sectionStart = -1;
+  for (const candidate of rawHeadingCandidates) {
+    const index = html.indexOf(candidate);
+    if (index >= 0) { sectionStart = index; break; }
+  }
+  const officialSection = sectionStart >= 0 ? html.slice(sectionStart, sectionStart + 50000) : html;
+  const tokenPattern = /<img\b[^>]*(?:alt|title)=["']([^"']+)["'][^>]*>|<a\b[^>]*href=["'][^"']*\/bis\/(?:eng\/)?players\/(\d+)\.html(?:\?[^"']*)?[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let pendingTeam = "";
+  for (const token of officialSection.matchAll(tokenPattern)) {
+    const imageLabel = decodeHtml(token[1] ?? "");
+    const matchedTeam = Object.entries(JP_TEAM_TO_API).find(([jpTeam]) => imageLabel.includes(jpTeam));
+    if (matchedTeam) {
+      pendingTeam = matchedTeam[1];
+      continue;
     }
+    if (!pendingTeam || !token[2]) continue;
+    const rawName = decodeHtml(token[3] ?? "").replace(/[　\s]+/g, " ").trim();
+    if (!rawName || !/[一-龯々〆ヵヶぁ-んァ-ヶA-Za-zＡ-Ｚａ-ｚ]/.test(rawName)) continue;
+    if (!result.has(pendingTeam)) {
+      result.set(pendingTeam, { name: playerNameKo(rawName), playerCode: token[2] });
+    }
+    pendingTeam = "";
+  }
 
-    for (const index of positions) {
-      const chunk = section.slice(index, index + 1800);
-      const playerLink = chunk.match(/href=["'][^"']*\/bis\/players\/(\d+)\.html[^"']*["'][^>]*>([\s\S]*?)<\/a>/i);
-      if (!playerLink) continue;
-      const rawName = decodeHtml(playerLink[2]);
-      if (!rawName || rawName === jpTeam || !/[一-龯ぁ-んァ-ヶA-Za-z]/.test(rawName)) continue;
-      result.set(apiTeam, { name: playerNameKo(rawName), playerCode: playerLink[1] });
-      break;
+  // 공식 페이지는 팀명이 텍스트가 아니라 구단 로고 img의 alt 속성에 들어가는 경우가 많습니다.
+  // 각 팀 로고 뒤에서 가장 가까운 선수 링크를 찾아 팀과 예고 선발을 직접 연결합니다.
+  const teamAlternation = Object.keys(JP_TEAM_TO_API).map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const logoStarterPattern = new RegExp(
+    `<img\\b[^>]*alt=["'](${teamAlternation})["'][^>]*>[\\s\\S]{0,1400}?<a\\b[^>]*href=["'][^"']*\\/bis\\/(?:eng\\/)?players\\/(\\d+)\\.html[^"']*["'][^>]*>([\\s\\S]*?)<\\/a>`,
+    "gi",
+  );
+  for (const match of html.matchAll(logoStarterPattern)) {
+    const apiTeam = JP_TEAM_TO_API[match[1]];
+    const rawName = decodeHtml(match[3]);
+    if (!apiTeam || !rawName || result.has(apiTeam)) continue;
+    result.set(apiTeam, { name: playerNameKo(rawName), playerCode: match[2] });
+  }
+
+  // 일부 화면은 표 안에 팀명과 선수 링크를 순서대로 배치하므로 기존 순서 방식도 보조로 사용합니다.
+  const tableBlocks = html.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi) ?? [];
+  for (const table of tableBlocks) {
+    const orderedTeams = [...table.matchAll(new RegExp(Object.keys(JP_TEAM_TO_API).join("|"), "g"))]
+      .map((match) => JP_TEAM_TO_API[match[0]])
+      .filter((team, index, all) => team && all.indexOf(team) === index);
+    const orderedPlayers = [...table.matchAll(/<a\b[^>]*href=["'][^"']*\/bis\/(?:eng\/)?players\/(\d+)\.html[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)]
+      .map((match) => ({ playerCode: match[1], name: playerNameKo(decodeHtml(match[2])) }))
+      .filter((player) => player.name && /[一-龯ぁ-んァ-ヶA-Za-z가-힣]/.test(player.name));
+    if (orderedTeams.length >= 1 && orderedTeams.length === orderedPlayers.length) {
+      orderedTeams.forEach((team, index) => {
+        if (!result.has(team)) result.set(team, orderedPlayers[index]);
+      });
+    }
+  }
+
+  // 표 구조가 달라진 경우에는 선수 링크 기준으로 가장 가까운 앞쪽 팀명을 사용합니다.
+  const links = [...html.matchAll(/<a\b[^>]*href=["'][^"']*\/bis\/(?:eng\/)?players\/(\d+)\.html[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const link of links) {
+    const rawName = decodeHtml(link[2]);
+    if (!rawName || !/[一-龯ぁ-んァ-ヶA-Za-z]/.test(rawName)) continue;
+
+    const linkIndex = link.index ?? 0;
+    const before = html.slice(Math.max(0, linkIndex - 2600), linkIndex);
+    let matchedTeam = "";
+    let bestIndex = -1;
+    for (const [jpTeam, apiTeam] of Object.entries(JP_TEAM_TO_API)) {
+      const index = before.lastIndexOf(jpTeam);
+      if (index > bestIndex) {
+        bestIndex = index;
+        matchedTeam = apiTeam;
+      }
+    }
+    if (!matchedTeam || bestIndex < 0 || result.has(matchedTeam)) continue;
+    result.set(matchedTeam, { name: playerNameKo(rawName), playerCode: link[1] });
+  }
+
+  // 표 구조가 없어도 공시 영역 전체의 팀명과 선수 링크 등장 순서로 보정합니다.
+  if (result.size < 12) {
+    const sectionStart = Math.max(html.search(/予告先発投手|announcement/i), 0);
+    const section = html.slice(sectionStart);
+    const tokens: Array<{ index: number; kind: "team" | "player"; team?: string; player?: OfficialStarter }> = [];
+    for (const [jpTeam, apiTeam] of Object.entries(JP_TEAM_TO_API)) {
+      const escaped = jpTeam.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      for (const match of section.matchAll(new RegExp(escaped, "g"))) {
+        tokens.push({ index: match.index ?? 0, kind: "team", team: apiTeam });
+      }
+    }
+    for (const match of section.matchAll(/<a\b[^>]*href=["'][^"']*\/bis\/(?:eng\/)?players\/(\d+)\.html(?:\?[^"']*)?[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+      const rawName = decodeHtml(match[2]);
+      if (!rawName || !/[一-龯ぁ-んァ-ヶA-Za-z]/.test(rawName)) continue;
+      tokens.push({ index: match.index ?? 0, kind: "player", player: { playerCode: match[1], name: playerNameKo(rawName) } });
+    }
+    tokens.sort((a, b) => a.index - b.index);
+    let pendingTeam = "";
+    for (const token of tokens) {
+      if (token.kind === "team") pendingTeam = token.team || "";
+      else if (pendingTeam && token.player && !result.has(pendingTeam)) {
+        result.set(pendingTeam, token.player);
+        pendingTeam = "";
+      }
     }
   }
 
   return result;
 }
-
 async function loadOfficialStarters(date: string) {
   const fallback = KNOWN_OFFICIAL_STARTERS[date] ?? {};
   try {
@@ -295,6 +392,20 @@ function mergeGameResults(primary:any[],results:any[]){
   return merged;
 }
 
+
+function officialStarterForGame(
+  starters: Map<string, OfficialStarter>,
+  game: any,
+  side: "away" | "home",
+) {
+  const apiName = side === "away" ? game.awayApiName : game.homeApiName;
+  const koName = side === "away" ? game.away : game.home;
+  const direct = starters.get(apiName);
+  if (direct) return direct;
+  const matchedApi = Object.entries(TEAMS).find(([, ko]) => ko === koName)?.[0];
+  return matchedApi ? starters.get(matchedApi) : undefined;
+}
+
 export const revalidate=300;
 
 export async function GET(req:Request){
@@ -362,14 +473,20 @@ export async function GET(req:Request){
   ]);
   const mergedGames=mergeGameResults(games,espnResults).map((game:any) => {
     if (game.completed) return game;
-    const awayOfficial = officialStarters.get(game.awayApiName);
-    const homeOfficial = officialStarters.get(game.homeApiName);
+    const awayOfficial = officialStarterForGame(officialStarters, game, "away");
+    const homeOfficial = officialStarterForGame(officialStarters, game, "home");
     const awayStarter = awayOfficial?.name || game.awayStarter || "";
     const homeStarter = homeOfficial?.name || game.homeStarter || "";
     return {
       ...game,
       awayStarter,
       homeStarter,
+      // 목록 화면과 상세 화면에서 사용했던 과거 필드명까지 함께 내려보내
+      // 필드명 차이 때문에 이름이 사라지는 문제를 차단합니다.
+      awayStarterName: awayStarter,
+      homeStarterName: homeStarter,
+      awayPitcher: awayStarter,
+      homePitcher: homeStarter,
       awayStarterCode: awayOfficial?.playerCode || game.awayStarterCode || "",
       homeStarterCode: homeOfficial?.playerCode || game.homeStarterCode || "",
       starterStatus: awayStarter || homeStarter ? "announced" : game.starterStatus,

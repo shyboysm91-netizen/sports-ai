@@ -1808,18 +1808,52 @@ function StarterCard({
             </div>
             {starter.recent10?.gamesDetail?.length ? (
               <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
-                {starter.recent10.gamesDetail.map((game, index) => (
-                  <div key={`${game.date}-${game.opponent}-${index}`} className="grid grid-cols-[76px_minmax(0,1fr)_34px] items-center gap-2 border-b border-slate-800 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[72px_minmax(76px,1fr)_32px_50px_48px_48px_42px_48px]">
-                    <span className="text-xs text-slate-400">{game.date.replace(/^\d{4}[.\/-]/, "").replace(/[.\/]/g, "-")} · {game.homeAway || "-"}</span>
-                    <span className="truncate font-bold">vs {kboShortTeamName(game.opponent)}</span>
-                    <b className={game.decision === "승" ? "text-blue-400" : game.decision === "패" ? "text-red-400" : "text-slate-500"}>{game.decision}</b>
-                    <span className="hidden text-center sm:block">{game.innings}이닝</span>
-                    <span className="hidden text-center sm:block">{game.earnedRuns}자책</span>
-                    <span className="hidden text-center sm:block">{game.walks}볼넷</span>
-                    <span className="hidden text-center sm:block">{game.strikeouts}K</span>
-                    <span className="hidden text-center sm:block">{game.pitches ? `${game.pitches}구` : "-"}</span>
-                  </div>
-                ))}
+                <table className="w-full table-fixed text-[11px] sm:text-xs lg:text-sm">
+                  <colgroup>
+                    <col className="w-[12%]" />
+                    <col className="w-[31%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[12%]" />
+                  </colgroup>
+                  <thead className="bg-slate-900 text-xs text-slate-400">
+                    <tr>
+                      <th className="px-1 py-2 sm:px-2 sm:py-3 text-left">날짜</th>
+                      <th className="px-1 py-2 sm:px-2 sm:py-3 text-left">경기</th>
+                      <th className="px-1 py-2 sm:px-2 sm:py-3 text-center">결과</th>
+                      <th className="px-1 py-2 sm:px-2 sm:py-3 text-center">이닝</th>
+                      <th className="px-1 py-2 sm:px-2 sm:py-3 text-center">자책</th>
+                      <th className="px-1 py-2 sm:px-2 sm:py-3 text-center">볼넷</th>
+                      <th className="px-1 py-2 sm:px-2 sm:py-3 text-center">삼진</th>
+                      <th className="px-1 py-2 sm:px-2 sm:py-3 text-center">투구수</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {starter.recent10.gamesDetail.map((game, index) => {
+                      const pitcherName = starter.koreanName;
+                      const opponent = kboShortTeamName(game.opponent);
+                      const matchup = game.homeAway === "홈"
+                        ? `${pitcherName} vs ${opponent}`
+                        : `${opponent} vs ${pitcherName}`;
+
+                      return (
+                        <tr key={`${game.date}-${game.opponent}-${index}`} className="border-t border-slate-800 first:border-t-0">
+                          <td className="px-1 py-2 sm:px-2 sm:py-3 text-xs text-slate-400">{game.date.replace(/^\d{4}[.\/-]/, "").replace(/[.\/]/g, "-")}</td>
+                          <td className="truncate px-1 py-2 font-bold sm:px-2 sm:py-3" title={matchup}>{matchup}</td>
+                          <td className={`px-1 py-2 sm:px-2 sm:py-3 text-center font-black ${game.decision === "승" ? "text-blue-400" : game.decision === "패" ? "text-red-400" : "text-slate-500"}`}>{game.decision}</td>
+                          <td className="px-1 py-2 sm:px-2 sm:py-3 text-center">{game.innings}</td>
+                          <td className="px-1 py-2 sm:px-2 sm:py-3 text-center">{game.earnedRuns}</td>
+                          <td className="px-1 py-2 sm:px-2 sm:py-3 text-center">{game.walks}</td>
+                          <td className="px-1 py-2 sm:px-2 sm:py-3 text-center">{game.strikeouts}</td>
+                          <td className="px-1 py-2 sm:px-2 sm:py-3 text-center font-bold">{game.pitches ? `${game.pitches}구` : "-"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-500">최근 등판 상세 기록을 불러오지 못했습니다.</div>
@@ -2049,11 +2083,18 @@ function HeadToHeadComparison({
   awaySection?: TeamFormSection;
   homeSection?: TeamFormSection;
 }) {
+  const seenH2H = new Set<string>();
   const games = (awaySection?.games ?? [])
     .filter((game) => {
       const teamScore = Number(game.teamScore);
       const opponentScore = Number(game.opponentScore);
-      return Number.isFinite(teamScore) && Number.isFinite(opponentScore) && !(teamScore === 0 && opponentScore === 0);
+      if (!Number.isFinite(teamScore) || !Number.isFinite(opponentScore) || (teamScore === 0 && opponentScore === 0)) return false;
+      const monthDay = String(game.date).slice(5);
+      if (monthDay && monthDay < "03-20") return false;
+      const key = `${game.date}|${game.opponent}|${teamScore}|${opponentScore}`;
+      if (seenH2H.has(key)) return false;
+      seenH2H.add(key);
+      return true;
     })
     .slice(0, 10);
   const awayWins = games.filter((game) => Number(game.teamScore) > Number(game.opponentScore)).length;
@@ -2066,7 +2107,7 @@ function HeadToHeadComparison({
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-      <h3 className="text-xl font-black">최근 맞대결 10경기</h3>
+      <h3 className="text-xl font-black">최근 맞대결 {games.length}경기</h3>
       <p className="mt-2 text-sm font-black">
         <span className={teamClass(awayName)}>{awayName} {awayWins}승</span>
         <span className="text-slate-500"> · </span>

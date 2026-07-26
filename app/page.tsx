@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { dataCacheUrl } from "./lib/client-data-cache";
+import { playerNameKo as mlbPlayerNameKo } from "./lib/mlb-ko";
+import { playerNameKo as npbPlayerNameKo } from "./api/npb/_shared";
 
 type League = "KBO" | "MLB" | "NPB";
 
@@ -16,6 +18,10 @@ type BaseballGame = {
   stadium: string;
   awayStarter: string;
   homeStarter: string;
+  awayStarterName?: string;
+  homeStarterName?: string;
+  awayPitcher?: string;
+  homePitcher?: string;
   awayStarterCode: string;
   homeStarterCode: string;
   awayTeamId?: number;
@@ -31,6 +37,19 @@ type GamesResponse = {
   games: BaseballGame[];
   message?: string;
 };
+
+function starterDisplayName(league: League, name: string) {
+  if (!name) return "미정";
+  if (league === "MLB") return mlbPlayerNameKo(name) || name;
+  if (league === "NPB") {
+    // /api/npb가 이미 한국어로 변환한 이름은 다시 로마자 변환 함수에 넣으면
+    // 빈 문자열이 되어 카드에는 `선발`만 남습니다. 한국어 이름은 그대로 표시하고,
+    // 일본어/영문 원문일 때만 NPB 이름 변환을 적용합니다.
+    if (/[가-힣]/.test(name)) return name;
+    return npbPlayerNameKo(name) || name;
+  }
+  return name;
+}
 
 const dateButtons = [
   { label: "어제", offset: -1 },
@@ -95,7 +114,17 @@ export default function Home() {
           throw new Error(data.message ?? `${league} 경기 일정을 불러오지 못했습니다.`);
         }
 
-        const loadedGames = Array.isArray(data.games) ? data.games : [];
+        const loadedGames = Array.isArray(data.games)
+          ? data.games.map((game) => ({
+              ...game,
+              // NPB 목록/상세 API에서 과거에 사용한 필드명이 달라도
+              // 카드에서는 실제 선발 이름을 하나로 통일해 표시합니다.
+              awayStarter:
+                game.awayStarter || game.awayStarterName || game.awayPitcher || "",
+              homeStarter:
+                game.homeStarter || game.homeStarterName || game.homePitcher || "",
+            }))
+          : [];
 
         // 선발은 일정 API가 확인한 공식 예고 선발만 사용합니다.
         // 팀 투수 목록의 첫 번째 선수를 임의 선발로 넣지 않습니다.
@@ -252,7 +281,7 @@ export default function Home() {
                           {game.away}
                         </h3>
                         <p className="mt-2 text-sm font-bold text-slate-400">
-                          선발 {game.awayStarter || "미정"}
+                          선발 {starterDisplayName(game.league, game.awayStarter)}
                         </p>
                       </div>
 
@@ -266,7 +295,7 @@ export default function Home() {
                           {game.home}
                         </h3>
                         <p className="mt-2 text-sm font-bold text-slate-400">
-                          선발 {game.homeStarter || "미정"}
+                          선발 {starterDisplayName(game.league, game.homeStarter)}
                         </p>
                       </div>
                     </div>

@@ -137,9 +137,18 @@ async function headToHead(awayId:number, homeId:number, season:string, date:stri
     const targetAwayScore=actualAwayId===awayId?a:h; const targetHomeScore=actualAwayId===awayId?h:a;
     awayRuns+=targetAwayScore; homeRuns+=targetHomeScore;
     if(targetAwayScore>targetHomeScore)awayWins++; else if(targetAwayScore<targetHomeScore)homeWins++; else draws++;
-    return {date:g.officialDate, away:teamNameKo(g.teams?.away?.team?.name??"",g.teams?.away?.team?.id), home:teamNameKo(g.teams?.home?.team?.name??"",g.teams?.home?.team?.id), awayScore:a, homeScore:h};
+    return {date:g.officialDate, awayId:num(g.teams?.away?.team?.id), homeId:num(g.teams?.home?.team?.id), away:teamNameKo(g.teams?.away?.team?.name??"",g.teams?.away?.team?.id), home:teamNameKo(g.teams?.home?.team?.name??"",g.teams?.home?.team?.id), awayScore:a, homeScore:h};
   });
-  return {games:rows.length, awayWins, awayLosses:homeWins, homeWins, homeLosses:awayWins, draws, awayRuns, homeRuns, recent:rows.slice(-10).reverse()};
+  const recent=rows.slice(-10).reverse();
+  let recentAwayWins=0,recentHomeWins=0,recentDraws=0,recentAwayRuns=0,recentHomeRuns=0;
+  for(const g of recent){
+    const awayIsTarget=Number(g.awayId)===awayId;
+    const targetAwayScore=awayIsTarget?g.awayScore:g.homeScore;
+    const targetHomeScore=awayIsTarget?g.homeScore:g.awayScore;
+    recentAwayRuns+=targetAwayScore; recentHomeRuns+=targetHomeScore;
+    if(targetAwayScore>targetHomeScore)recentAwayWins++; else if(targetAwayScore<targetHomeScore)recentHomeWins++; else recentDraws++;
+  }
+  return {games:recent.length, awayWins:recentAwayWins, awayLosses:recentHomeWins, homeWins:recentHomeWins, homeLosses:recentAwayWins, draws:recentDraws, awayRuns:recentAwayRuns, homeRuns:recentHomeRuns, recent};
 }
 
 async function bullpen(teamId:number,date:string) {

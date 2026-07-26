@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const revalidate = 600;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type PitchSplit = {
   games: number;
@@ -15,39 +16,103 @@ type Coordinates = { latitude: number; longitude: number };
 
 const emptySplit = (): PitchSplit => ({ games: 0, wins: 0, losses: 0, era: "-", whip: "-", innings: "-" });
 
-function normalizeSplit(raw: any): PitchSplit {
-  const stat = raw?.stat ?? raw ?? {};
-  return {
-    games: Number(stat.gamesPlayed ?? stat.gamesPitched ?? stat.gamesStarted ?? 0),
-    wins: Number(stat.wins ?? 0),
-    losses: Number(stat.losses ?? 0),
-    era: String(stat.era ?? "-"),
-    whip: String(stat.whip ?? "-"),
-    innings: String(stat.inningsPitched ?? "-"),
-  };
-}
-
 async function fetchJson(url: string) {
-  const res = await fetch(url, { next: { revalidate: 600 }, headers: { Accept: "application/json" } });
+  const res = await fetch(url, { cache: "no-store", headers: { Accept: "application/json", "User-Agent": "Sports-AI/3.1" } });
   if (!res.ok) throw new Error(`외부 API ${res.status}`);
   return res.json();
 }
 
-async function pitcherSplit(playerId: number, season: string, sitCode?: "home" | "away", venueId?: number) {
-  if (!playerId) return emptySplit();
-  const qs = new URLSearchParams({ stats: venueId ? "byDateRange" : "season", group: "pitching", season });
-  if (sitCode) qs.set("sitCodes", sitCode);
-  if (venueId) {
-    qs.set("startDate", `${season}-01-01`);
-    qs.set("endDate", `${season}-12-31`);
-    qs.set("venueIds", String(venueId));
+function outsFromInnings(value: unknown) {
+  const [whole, decimal] = String(value ?? "0").split(".");
+  return Number(whole || 0) * 3 + Number(decimal || 0);
+}
+
+function aggregatePitchRows(rows: any[]): PitchSplit {
+  if (!rows.length) return emptySplit();
+  let outs=0,wins=0,losses=0,earnedRuns=0,hits=0,walks=0;
+  for(const row of rows){
+    const stat=row?.stat ?? {};
+    outs+=outsFromInnings(stat.inningsPitched);
+    wins+=Number(stat.wins ?? 0); losses+=Number(stat.losses ?? 0);
+    earnedRuns+=Number(stat.earnedRuns ?? 0); hits+=Number(stat.hits ?? 0); walks+=Number(stat.baseOnBalls ?? 0);
   }
-  try {
-    const data = await fetchJson(`https://statsapi.mlb.com/api/v1/people/${playerId}/stats?${qs.toString()}`);
-    const split = data?.stats?.[0]?.splits?.[0];
-    return split ? normalizeSplit(split) : emptySplit();
-  } catch {
-    return emptySplit();
+  const ip=outs/3;
+  return {games:rows.length,wins,losses,era:ip?(earnedRuns*9/ip).toFixed(2):"-",whip:ip?((hits+walks)/ip).toFixed(2):"-",innings:`${Math.floor(outs/3)}.${outs%3}`};
+}
+
+async function pitcherSplits(playerId:number,teamId:number,season:string,venueId:number,endDate:string){
+  if(!playerId) return {home:emptySplit(),away:emptySplit(),venue:emptySplit()};
+  try{
+    const data=await fetchJson(`https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=pitching&season=${season}`);
+    const rows=data?.stats?.find((x:any)=>x?.type?.displayName==="gameLog")?.splits ?? [];
+
+    // MLB gameLog의 isHome은 응답에 따라 boolean 또는 문자열로 내려올 수 있다.
+    // 이전 코드는 boolean만 인정해 분류가 실패했고, 화면에서 시즌 전체값이 대체값으로 반복됐다.
+    const readHomeFlag=(value:any):boolean|undefined=>{
+      if(value===true||value===1||value==="1") return true;
+      if(value===false||value===0||value==="0") return false;
+      const normalized=String(value??"").trim().toLowerCase();
+      if(normalized==="true"||normalized==="home"||normalized==="h") return true;
+      if(normalized==="false"||normalized==="away"||normalized==="a") return false;
+      return undefined;
+    };
+
+    const scheduleCache=new Map<string,any[]>();
+    const resolveGame=async(row:any)=>{
+      const rowDate=String(row?.date??"").slice(0,10);
+      if(!rowDate) return null;
+      if(!scheduleCache.has(rowDate)){
+        try{
+          const schedule=await fetchJson(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(rowDate)}&hydrate=team,venue`);
+          scheduleCache.set(rowDate,(schedule?.dates??[]).flatMap((d:any)=>d?.games??[]));
+        }catch{ scheduleCache.set(rowDate,[]); }
+      }
+      const games=scheduleCache.get(rowDate)??[];
+      const gamePk=Number(row?.game?.gamePk??row?.gamePk??0);
+      const opponentId=Number(row?.opponent?.id??0);
+      return games.find((g:any)=>{
+        if(gamePk&&Number(g?.gamePk??0)===gamePk) return true;
+        const h=Number(g?.teams?.home?.team?.id??0);
+        const a=Number(g?.teams?.away?.team?.id??0);
+        if(teamId&&(h===teamId||a===teamId)&&(!opponentId||h===opponentId||a===opponentId)) return true;
+        return false;
+      })??null;
+    };
+
+    const enriched=await Promise.all(rows.map(async(row:any)=>{
+      let isHome=readHomeFlag(row?.isHome);
+      let matchedVenueId=Number(row?.venue?.id??row?.game?.venue?.id??0);
+
+      // gameLog 자체 정보가 없을 때만 해당 경기의 공식 일정으로 보완한다.
+      if(isHome===undefined||!matchedVenueId){
+        const game=await resolveGame(row);
+        if(game){
+          const homeId=Number(game?.teams?.home?.team?.id??0);
+          const awayId=Number(game?.teams?.away?.team?.id??0);
+          const opponentId=Number(row?.opponent?.id??0);
+          if(isHome===undefined){
+            if(teamId&&homeId===teamId) isHome=true;
+            else if(teamId&&awayId===teamId) isHome=false;
+            else if(opponentId&&awayId===opponentId) isHome=true;
+            else if(opponentId&&homeId===opponentId) isHome=false;
+          }
+          if(!matchedVenueId) matchedVenueId=Number(game?.venue?.id??0);
+        }
+      }
+      return {...row,isHome,matchedVenueId};
+    }));
+
+    const homeRows=enriched.filter((x:any)=>x?.isHome===true);
+    const awayRows=enriched.filter((x:any)=>x?.isHome===false);
+    const venueRows=enriched.filter((x:any)=>venueId>0&&Number(x?.matchedVenueId??0)===venueId);
+
+    return {
+      home:aggregatePitchRows(homeRows),
+      away:aggregatePitchRows(awayRows),
+      venue:aggregatePitchRows(venueRows),
+    };
+  }catch{
+    return {home:emptySplit(),away:emptySplit(),venue:emptySplit()};
   }
 }
 
@@ -208,13 +273,9 @@ export async function GET(req: NextRequest) {
     });
     const umpireName = homePlate?.official?.fullName ?? homePlate?.official?.name ?? null;
 
-    const [awayHome, awayRoad, awayVenue, homeHome, homeRoad, homeVenue] = await Promise.all([
-      pitcherSplit(awayStarterId, season, "home"),
-      pitcherSplit(awayStarterId, season, "away"),
-      pitcherSplit(awayStarterId, season, undefined, venueId),
-      pitcherSplit(homeStarterId, season, "home"),
-      pitcherSplit(homeStarterId, season, "away"),
-      pitcherSplit(homeStarterId, season, undefined, venueId),
+    const [awaySplits, homeSplits] = await Promise.all([
+      pitcherSplits(awayStarterId, awayTeamId, season, venueId, date),
+      pitcherSplits(homeStarterId, homeTeamId, season, venueId, date),
     ]);
 
     return NextResponse.json({
@@ -240,8 +301,8 @@ export async function GET(req: NextRequest) {
         status: umpireName ? "확정" : "경기 직전 공개 예정",
       },
       pitchers: {
-        away: { home: awayHome, away: awayRoad, venue: awayVenue },
-        home: { home: homeHome, away: homeRoad, venue: homeVenue },
+        away: awaySplits,
+        home: homeSplits,
       },
       note: "날씨는 경기장 좌표와 경기 시작시간 기준 예보입니다. 주심은 MLB 경기 피드에 배정이 공개되는 즉시 표시됩니다.",
     });

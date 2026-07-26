@@ -81,6 +81,7 @@ async function pitcherDetail(
       name,
       stadium,
       date,
+      playerCode: String(starter.playerCode ?? ""),
     });
     const detail = await json(origin, `/api/npb/pitcher-detail?${params.toString()}`);
     return detail?.success ? detail : null;

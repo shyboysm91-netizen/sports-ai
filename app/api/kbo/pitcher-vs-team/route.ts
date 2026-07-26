@@ -369,7 +369,7 @@ async function fetchHtml(url: string) {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       Accept: "text/html,application/xhtml+xml",
-      Referer: "https://www.koreabaseball.com/",
+      Referer: url.includes("mykbostats.com") ? "https://mykbostats.com/" : "https://www.koreabaseball.com/",
     },
     cache: "no-store",
   });
@@ -612,6 +612,17 @@ function weekStartText(dateText: string) {
   return kstDateText(date);
 }
 
+function myKboWeekAnchors(dateText: string) {
+  const base = new Date(`${dateText}T12:00:00+09:00`);
+  const anchors: string[] = [];
+  for (const offset of [-7, 0, 7, 14]) {
+    const value = new Date(base);
+    value.setDate(value.getDate() + offset);
+    anchors.push(weekStartText(kstDateText(value)));
+  }
+  return [...new Set(anchors)];
+}
+
 function myKboGameLinks(text: string, team: string, allowedDates: Set<string>) {
   const token = MYKBO_URL_TEAM[team];
   if (!token) return [] as string[];
@@ -632,31 +643,78 @@ function myKboPitchingTables(html: string) {
   const source = start >= 0 ? html.slice(start) : html;
   return (source.match(/<table\b[^>]*>[\s\S]*?<\/table>/gi) ?? []).filter((table) => {
     const text = cleanHtml(table);
-    return /\bERA\b/i.test(text) && /\bIP\b/i.test(text) && /\bNP\b/i.test(text);
+    return /\bERA\b/i.test(text) && /\bIP\b/i.test(text) && /\b(?:NP|PITCHES?|PIT)\b/i.test(text);
   });
 }
 
 function myKboStarterPitches(html: string, href: string, team: string) {
   const tables = myKboPitchingTables(html);
+  if (!tables.length) return null;
+
+  const ownToken = (MYKBO_URL_TEAM[team] || "").toUpperCase();
+  if (!ownToken) return null;
+
+  // MyKBO 경기 페이지는 현재 원정/홈 투수 기록을 하나의 표 안에 연속으로
+  // 표시하는 경우가 있습니다. 예전 코드는 표가 팀별로 2개라고 가정해서
+  // 홈팀은 두 번째 표를 찾다가 실패했고, 원정팀도 페이지 구조에 따라
+  // 투구수를 놓쳤습니다. 팀 머리글을 찾은 뒤 그 아래 첫 투수(선발)의 NP를 읽습니다.
+  for (const table of tables) {
+    const rows = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
+    let activeTeam = "";
+    let pitchColumn = -1;
+
+    for (const row of rows) {
+      const cells = (row.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) ?? []).map(cleanHtml);
+      if (!cells.length) continue;
+
+      const headers = cells.map((cell) => cell.toUpperCase().replace(/[^A-Z]/g, ""));
+      const npIndex = headers.findIndex((value) =>
+        value === "NP" || value === "PITCH" || value === "PITCHES" || value === "PIT",
+      );
+      const ipIndex = headers.findIndex((value) => value === "IP");
+
+      // 팀별 머리글 예: LG | ERA | IP | NP | ... / KT | ERA | IP | NP | ...
+      if (npIndex >= 0 && ipIndex >= 0) {
+        activeTeam = headers[0] || cells[0].toUpperCase().replace(/[^A-Z]/g, "");
+        pitchColumn = npIndex;
+        continue;
+      }
+
+      if (activeTeam !== ownToken || pitchColumn < 0) continue;
+
+      // 해당 팀 머리글 다음의 첫 선수 행이 선발투수입니다.
+      // /players/와 /bis/eng/players/ 등 링크 앞 경로가 달라도 인식합니다.
+      if (cells.length <= pitchColumn) continue;
+      const pitches = numberValue(cells[pitchColumn]);
+      if (pitches >= 20) return pitches;
+    }
+  }
+
+  // 과거 구조처럼 팀별 표가 따로 내려오는 경우를 위한 보조 처리입니다.
   const match = href.match(/\/games\/\d+-([A-Za-z]+)-vs-([A-Za-z]+)-\d{8}$/i);
   const teams = match ? [match[1], match[2]] : [];
-  const index = teams.findIndex((value) => value.toLowerCase() === (MYKBO_URL_TEAM[team] || "").toLowerCase());
-  const table = tables[index >= 0 ? index : 0];
-  if (!table) return null;
-  const rows = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
-  let headers: string[] = [];
+  const tableIndex = teams.findIndex((value) => value.toUpperCase() === ownToken);
+  const fallbackTable = tables[tableIndex >= 0 ? tableIndex : 0];
+  if (!fallbackTable) return null;
+
+  const rows = fallbackTable.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
+  let pitchColumn = -1;
   for (const row of rows) {
     const cells = (row.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) ?? []).map(cleanHtml);
     if (!cells.length) continue;
-    if (cells.some((cell) => cell.toUpperCase() === "NP") && cells.some((cell) => cell.toUpperCase() === "IP")) { headers = cells.map((cell) => cell.toUpperCase()); continue; }
-    if (!/href=["']\/players\/\d+-/i.test(row)) continue;
-    const player = cleanHtml(row.match(/href=["']\/players\/\d+-[^"']+["'][^>]*>([\s\S]*?)<\/a>/i)?.[1] || "");
-    const playerIndex = cells.findIndex((cell) => normalize(cell) === normalize(player));
-    const stats = playerIndex >= 0 ? cells.slice(playerIndex + 1) : cells.slice(1);
-    const npIndex = Math.max(0, headers.findIndex((value) => value === "NP") - 1);
-    const pitches = numberValue(stats[npIndex]);
-    return pitches > 0 ? pitches : null;
+    const headers = cells.map((cell) => cell.toUpperCase().replace(/[^A-Z]/g, ""));
+    const npIndex = headers.findIndex((value) =>
+      value === "NP" || value === "PITCH" || value === "PITCHES" || value === "PIT",
+    );
+    if (npIndex >= 0 && headers.includes("IP")) {
+      pitchColumn = npIndex;
+      continue;
+    }
+    if (pitchColumn < 0 || cells.length <= pitchColumn) continue;
+    const pitches = numberValue(cells[pitchColumn]);
+    if (pitches >= 20) return pitches;
   }
+
   return null;
 }
 
@@ -708,7 +766,7 @@ async function enrichRecentDetails(summary: RecentPitchingSummary | null, team: 
   const scheduleSlug = MYKBO_TEAM_SCHEDULE[team];
   if (scheduleSlug) {
     const allowed = new Set(normalizedDates);
-    const weeks = [...new Set(normalizedDates.map(weekStartText))];
+    const weeks = [...new Set(normalizedDates.flatMap(myKboWeekAnchors))];
     const pages = await Promise.all(
       [...weeks.map((week) => `${MYKBO_BASE}/schedule/${scheduleSlug}/week_of/${week}`), `${MYKBO_BASE}/games/feed_for/${scheduleSlug}`]
         .map((url) => fetchHtmlSafely(url)),
@@ -846,7 +904,26 @@ function parseRecent(html: string, limit: number, team: string): RecentPitchingS
     });
   }
 
-  const selected = parsed.slice(0, limit);
+  // KBO Daily 페이지는 선수에 따라 오래된 경기부터 내려오는 경우가 있습니다.
+  // 화면에는 반드시 가장 최근 등판부터 표시되도록 날짜를 직접 정렬하고 중복 행을 제거합니다.
+  const dateSortValue = (value: string) => {
+    const cleaned = value.replace(/[.\/]/g, "-").trim();
+    const match = cleaned.match(/^(?:(\d{4})-)?(\d{1,2})-(\d{1,2})$/);
+    if (!match) return 0;
+    const year = Number(match[1] || new Date().getFullYear());
+    return year * 10000 + Number(match[2]) * 100 + Number(match[3]);
+  };
+
+  const seen = new Set<string>();
+  const selected = parsed
+    .sort((a, b) => dateSortValue(b.date) - dateSortValue(a.date))
+    .filter((row) => {
+      const key = `${row.date}|${normalize(row.opponent)}|${row.inningsText}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, limit);
   if (!selected.length) return null;
 
   const totals = selected.reduce(

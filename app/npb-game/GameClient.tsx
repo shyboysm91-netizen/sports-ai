@@ -422,7 +422,7 @@ function StarterPanel({
   source: string;
   detail?: any;
 }) {
-  const selected = detail || pitcher;
+  const selected = pitcher ? { ...pitcher, ...(detail?.success === false ? {} : (detail || {})) } : (detail?.success === false ? null : detail);
   return (
     <Card title={`${shortTeamName(team)} 선발투수`}>
       <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
@@ -469,22 +469,60 @@ function StarterPanel({
       {detail?.recent10?.gamesDetail?.length ? (
         <div className="mt-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-black text-blue-400">최근 등판 10경기 상세</p>
-            <p className="text-xs text-slate-500">날짜 · 상대 · 승패 · 이닝 · 자책 · 볼넷 · 탈삼진 · 투구수</p>
+            <p className="text-base font-black text-blue-400">최근 등판 10경기 상세</p>
+            <p className="text-[11px] text-slate-500 sm:text-xs">날짜 · 상대 · 승패 · 이닝 · 자책 · 볼넷 · 탈삼진 · 투구수</p>
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
-            {detail.recent10.gamesDetail.map((game: any, index: number) => (
-              <div key={`${game.date}-${game.opponent}-${index}`} className="grid grid-cols-[76px_1fr_34px] items-center gap-2 border-b border-slate-800 px-3 py-3 text-sm last:border-b-0 sm:grid-cols-[90px_1fr_42px_72px_65px_65px_65px_70px]">
-                <span className="text-xs text-slate-400">{String(game.date).slice(5)} · {game.side === "home" ? "홈" : "원정"}</span>
-                <span className="truncate font-bold">vs {shortTeamName(game.opponent)}</span>
-                <b className={game.decision === "승" ? "text-blue-400" : game.decision === "패" ? "text-red-400" : "text-slate-500"}>{game.decision || "-"}</b>
-                <span className="hidden text-center sm:block">{game.innings}이닝</span>
-                <span className="hidden text-center sm:block">{game.earnedRuns}자책</span>
-                <span className="hidden text-center sm:block">{game.walks}볼넷</span>
-                <span className="hidden text-center sm:block">{game.strikeouts}K</span>
-                <span className="hidden text-center sm:block">{game.pitches ? `${game.pitches}구` : "-"}</span>
-              </div>
-            ))}
+            <table className="w-full table-fixed text-[10px] sm:text-[11px] xl:text-xs">
+              <colgroup>
+                <col className="w-[10%]" />
+                <col className="w-[34%]" />
+                <col className="w-[7%]" />
+                <col className="w-[9%]" />
+                <col className="w-[9%]" />
+                <col className="w-[9%]" />
+                <col className="w-[9%]" />
+                <col className="w-[13%]" />
+              </colgroup>
+              <thead className="bg-slate-900 text-[10px] text-slate-400 sm:text-[11px] xl:text-xs">
+                <tr>
+                  <th className="px-0.5 py-2 text-left sm:px-1 sm:py-2.5">날짜</th>
+                  <th className="px-0.5 py-2 text-left sm:px-1 sm:py-2.5">경기</th>
+                  <th className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">결과</th>
+                  <th className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">이닝</th>
+                  <th className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">자책</th>
+                  <th className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">볼넷</th>
+                  <th className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">삼진</th>
+                  <th className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">투구수</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.recent10.gamesDetail.map((game: any, index: number) => {
+                  const pitcherName = starter || selected?.name || shortTeamName(team);
+                  const opponent = shortTeamName(game.opponent) || "상대팀";
+                  const isHome = game.side === "home" || game.homeAway === "홈";
+                  const matchup = isHome
+                    ? `${pitcherName} vs ${opponent}`
+                    : `${opponent} vs ${pitcherName}`;
+                  const dateText = String(game.date || "-")
+                    .replace(/^\d{4}[.\/-]/, "")
+                    .replace(/[.\/]/g, "-");
+
+                  return (
+                    <tr key={`${game.date}-${game.opponent}-${index}`} className="border-t border-slate-800 first:border-t-0">
+                      <td className="whitespace-nowrap px-0.5 py-2.5 text-[10px] text-slate-400 sm:px-1 sm:py-3 sm:text-[11px]">{dateText}</td>
+                      <td className="break-keep px-1 py-2.5 font-bold leading-snug sm:px-1.5 sm:py-3" title={matchup}>{matchup}</td>
+                      <td className={`px-0.5 py-2.5 text-center font-black sm:px-1 sm:py-3 ${game.decision === "승" ? "text-blue-400" : game.decision === "패" ? "text-red-400" : "text-slate-500"}`}>{game.decision || "-"}</td>
+                      <td className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">{game.innings ?? "-"}</td>
+                      <td className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">{game.earnedRuns ?? "-"}</td>
+                      <td className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">{game.walks ?? "-"}</td>
+                      <td className="px-0.5 py-2.5 text-center sm:px-1 sm:py-3">{game.strikeouts ?? "-"}</td>
+                      <td className="whitespace-nowrap px-0.5 py-2.5 text-center font-bold sm:px-1 sm:py-3">{game.pitches ? `${game.pitches}구` : "-"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       ) : (
@@ -535,6 +573,8 @@ function Content() {
   const stadium = query.get("stadium") || "";
   const awayStarter = query.get("awayStarter") || "";
   const homeStarter = query.get("homeStarter") || "";
+  const awayStarterCode = query.get("awayStarterCode") || "";
+  const homeStarterCode = query.get("homeStarterCode") || "";
 
   const [data, setData] = useState<any>(null);
   const [marketData, setMarketData] = useState<any>(null);
@@ -556,7 +596,7 @@ function Content() {
           signal: controller.signal,
         };
 
-        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=3`;
+        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&awayStarterCode=${encodeURIComponent(awayStarterCode)}&homeStarterCode=${encodeURIComponent(homeStarterCode)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=7`;
         const [analysisResponse, marketResponse, weatherResponse, scheduleResponse] =
           await Promise.all([
             fetch(dataCacheUrl(`${analysisBase}&fast=1`, 300), baseOptions),
@@ -600,7 +640,7 @@ function Content() {
 
     loadAll();
     return () => controller.abort();
-  }, [away, home, date, stadium]);
+  }, [away, home, date, stadium, awayStarter, homeStarter, awayStarterCode, homeStarterCode]);
 
   const season = data ? advantageLabel(data.scores.season, away, home) : null;
   const batting = data ? advantageLabel(data.scores.batting, away, home) : null;
@@ -630,20 +670,63 @@ function Content() {
     awayStarter || scheduledGame?.awayStarter || "";
   const resolvedHomeStarter =
     homeStarter || scheduledGame?.homeStarter || "";
+  const resolvedAwayStarterCode = awayStarterCode || scheduledGame?.awayStarterCode || "";
+  const resolvedHomeStarterCode = homeStarterCode || scheduledGame?.homeStarterCode || "";
   const normalizePitcherName = (value: unknown) =>
     String(value ?? "").replace(/[\s・.·]/g, "").toLowerCase();
-  const awayStarterPitcher = resolvedAwayStarter
-    ? data?.awayRotation?.find((pitcher: any) =>
-        normalizePitcherName(pitcher.name) === normalizePitcherName(resolvedAwayStarter),
-      ) || null
-    : null;
-  const homeStarterPitcher = resolvedHomeStarter
-    ? data?.homeRotation?.find((pitcher: any) =>
-        normalizePitcherName(pitcher.name) === normalizePitcherName(resolvedHomeStarter),
-      ) || null
-    : null;
+  const findResolvedPitcher = (items: any[] | undefined, requested: string) => {
+    if (!requested || !Array.isArray(items)) return null;
+    const wanted = normalizePitcherName(requested);
+    return (
+      items.find((pitcher: any) => normalizePitcherName(pitcher?.name) === wanted) ||
+      items.find((pitcher: any) => normalizePitcherName(pitcher?.originalName) === wanted) ||
+      items.find((pitcher: any) => {
+        const ko = normalizePitcherName(pitcher?.name);
+        return ko.length >= 4 && (ko.includes(wanted) || wanted.includes(ko));
+      }) ||
+      null
+    );
+  };
+  const awayStarterPitcher =
+    data?.awayStarterSeason ||
+    findResolvedPitcher(data?.awayPlayers, resolvedAwayStarter) ||
+    findResolvedPitcher(data?.awayRotation, resolvedAwayStarter);
+  const homeStarterPitcher =
+    data?.homeStarterSeason ||
+    findResolvedPitcher(data?.homePlayers, resolvedHomeStarter) ||
+    findResolvedPitcher(data?.homeRotation, resolvedHomeStarter);
   const awayStarterSource = resolvedAwayStarter ? "NPB 공식 예고 선발" : "발표 전";
   const homeStarterSource = resolvedHomeStarter ? "NPB 공식 예고 선발" : "발표 전";
+
+  // 경기 상세 URL에 선발 이름이 비어 있어도 일정 API에서 예고 선발이 확인되면
+  // 그 이름으로 분석 API를 한 번 더 호출해 시즌 기록과 최근 등판을 연결합니다.
+  useEffect(() => {
+    if (!scheduledGame || (!resolvedAwayStarter && !resolvedHomeStarter)) return;
+    if (data?.awayStarterSeason && data?.homeStarterSeason) return;
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      away,
+      home,
+      date,
+      stadium,
+      awayStarter: resolvedAwayStarter,
+      homeStarter: resolvedHomeStarter,
+      awayStarterCode: String(scheduledGame?.awayStarterCode || awayStarterCode || ""),
+      homeStarterCode: String(scheduledGame?.homeStarterCode || homeStarterCode || ""),
+      npbPitcherFix: "6",
+    });
+    fetch(dataCacheUrl(`/api/npb/analysis?${params.toString()}`, 60), {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((response) => response.json().then((full) => ({ response, full })))
+      .then(({ response, full }) => {
+        if (!controller.signal.aborted && response.ok && full?.success) setData(full);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [scheduledGame, resolvedAwayStarter, resolvedHomeStarter, away, home, date, stadium, awayStarterCode, homeStarterCode]);
 
   useEffect(() => {
     if (!data || error) return;

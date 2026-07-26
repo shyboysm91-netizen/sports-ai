@@ -85,17 +85,44 @@ function matchupSentence(away:string,home:string,h2h:any,score:number){
   return `최근 맞대결은 ${shortTeam(home)} 기준 ${wins}승 ${losses}패입니다. 표본은 제한적이지만 ${edgeTeam(score,away,home)}가 상대 매치업에서 조금 더 나은 결과를 냈습니다.`;
 }
 
-function starterCard(rotation:any[], requested:string){
-  if(!requested) return null;
-  const requestedKo=playerNameKo(requested);
+
+const STARTER_CODE_TO_ORIGINAL: Record<string, string> = {
+  "11615159": "Nishidate, Kota",
+  "91995153": "Kuribayashi, Ryoji",
+  "31635117": "Wakui, Hideaki",
+};
+
+async function starterOriginalName(playerCode: string) {
+  if (!playerCode) return "";
+  if (STARTER_CODE_TO_ORIGINAL[playerCode]) return STARTER_CODE_TO_ORIGINAL[playerCode];
+  try {
+    const response = await fetch(`https://npb.jp/bis/eng/players/${playerCode}.html`, {
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" },
+      next: { revalidate: 86400 },
+    });
+    if (!response.ok) return "";
+    const html = await response.text();
+    const text = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+    const match = text.match(/([A-Z][A-Za-z'\-]+,\s*[A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+)?)/);
+    return match?.[1]?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+function starterCard(rotation:any[], requested:string, originalHint = "", playerCode = ""){
+  if(!requested && !originalHint) return null;
+  const requestedKo=requested ? playerNameKo(requested) : "";
   const pitcher=rotation.find((p:any)=>
+    (playerCode && String(p.playerCode ?? "") === playerCode) ||
+    (originalHint && sameName(p.originalName??"",originalHint)) ||
     sameName(p.name??"",requestedKo)||sameName(p.originalName??"",requested)||sameName(p.originalName??"",requestedKo)
   )||null;
   if(!pitcher) return null;
   return {
     ...pitcher,
-    name: requestedKo,
-    requestedName:requestedKo,
+    name: requestedKo || pitcher.name,
+    requestedName:requestedKo || pitcher.name,
     status:"공식 선발 연결",
   };
 }
@@ -107,6 +134,7 @@ export async function GET(req:Request){
   const u=new URL(req.url),q=u.searchParams;
   const away=q.get("away")||"원정팀",home=q.get("home")||"홈팀";
   const awayStarter=q.get("awayStarter")||"",homeStarter=q.get("homeStarter")||"",stadium=q.get("stadium")||"";
+  const awayStarterCode=q.get("awayStarterCode")||"",homeStarterCode=q.get("homeStarterCode")||"";
   const fast=q.get("fast")==="1";
   const date=q.get("date")||String(new Date().getFullYear());
   const season=date.slice(0,4);
@@ -122,13 +150,17 @@ export async function GET(req:Request){
    json(u.origin,`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`),
   ]);
 
-  const awayBase=starterCard(awayPit.players||awayPit.rotation||[],awayStarter);
-  const homeBase=starterCard(homePit.players||homePit.rotation||[],homeStarter);
+  const [awayOriginalHint, homeOriginalHint] = await Promise.all([
+    starterOriginalName(awayStarterCode),
+    starterOriginalName(homeStarterCode),
+  ]);
+  const awayBase=starterCard(awayPit.players||awayPit.rotation||[],awayStarter,awayOriginalHint,awayStarterCode);
+  const homeBase=starterCard(homePit.players||homePit.rotation||[],homeStarter,homeOriginalHint,homeStarterCode);
   const [awayDetail,homeDetail]=fast
     ? [null,null]
     : await Promise.all([
-        awayBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}`):Promise.resolve(null),
-        homeBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}`):Promise.resolve(null),
+        awayBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}&playerCode=${encodeURIComponent(awayStarterCode||awayBase.playerCode||"")}`):Promise.resolve(null),
+        homeBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}&playerCode=${encodeURIComponent(homeStarterCode||homeBase.playerCode||"")}`):Promise.resolve(null),
       ]);
 
   const a:Standing|undefined=standings.standings?.find((x:Standing)=>x.team===away);
@@ -221,8 +253,11 @@ export async function GET(req:Request){
     awayStanding:a||null,homeStanding:h||null,
     awayBatting:ab||null,homeBatting:hb||null,
     awayPitching:ap||null,homePitching:hp||null,
+    awayPlayers:awayPit.players||[],homePlayers:homePit.players||[],
     awayRotation:awayPit.rotation||[],homeRotation:homePit.rotation||[],
     awayBullpen:awayPit.bullpen||[],homeBullpen:homePit.bullpen||[],
+    awayStarterSeason:awayBase,
+    homeStarterSeason:homeBase,
     awayStarterDetail:awayStarterFull,
     homeStarterDetail:homeStarterFull,
     awayRecent:awayRecent?.success?awayRecent:null,
