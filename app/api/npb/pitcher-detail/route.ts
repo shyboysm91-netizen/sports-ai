@@ -20,6 +20,7 @@ type Appearance = {
 
 type GameLink = {
   url: string;
+  scoreUrl: string;
   date: string;
   opponent: string;
   venue: string;
@@ -40,6 +41,22 @@ const TEAM_ALIASES: Array<{ ko: string; aliases: string[] }> = [
   { ko: "사이타마 세이부 라이온스", aliases: ["Saitama Seibu Lions", "Seibu"] },
   { ko: "지바 롯데 마린스", aliases: ["Chiba Lotte Marines", "Lotte"] },
 ];
+
+
+const SCORE_TEAM_CODES: Record<string, string> = {
+  "요미우리 자이언츠": "g",
+  "주니치 드래건스": "d",
+  "요코하마 DeNA 베이스타스": "db",
+  "도쿄 야쿠르트 스왈로스": "s",
+  "히로시마 도요 카프": "c",
+  "한신 타이거스": "t",
+  "후쿠오카 소프트뱅크 호크스": "h",
+  "지바 롯데 마린스": "m",
+  "홋카이도 닛폰햄 파이터스": "f",
+  "오릭스 버팔로스": "b",
+  "도호쿠 라쿠텐 골든이글스": "e",
+  "사이타마 세이부 라이온스": "l",
+};
 
 const VENUES: Record<string, string> = {
   "Jingu": "메이지 진구구장",
@@ -62,9 +79,27 @@ function normalize(value: string) {
 }
 
 function samePitcher(a: string, b: string) {
-  const aa = normalize(a.replace(/\([^)]*\)/g, ""));
-  const bb = normalize(b.replace(/\([^)]*\)/g, ""));
-  return aa === bb || (aa.length >= 5 && bb.length >= 5 && (aa.includes(bb) || bb.includes(aa)));
+  const clean = (value: string) => value
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/（[^）]*）/g, " ")
+    .trim();
+  const aa = normalize(clean(a));
+  const bb = normalize(clean(b));
+  if (!aa || !bb) return false;
+  if (aa === bb) return true;
+
+  // NPB 영문 박스스코어는 Mori, Y.Maeda처럼 성만 또는 이니셜+성으로 표시한다.
+  // S.Mori / Shohei Mori / Mori를 모두 같은 선수로 인식하도록 영문 성을 비교한다.
+  const latinSurname = (value: string) => {
+    const tokens = clean(value).toLowerCase().replace(/[^a-z.\s,-]/g, " ")
+      .split(/[\s,]+/).map((token) => token.replace(/\./g, "")).filter(Boolean);
+    return tokens.length ? tokens[tokens.length - 1] : "";
+  };
+  const aSurname = latinSurname(a);
+  const bSurname = latinSurname(b);
+  if (aSurname && bSurname && aSurname === bSurname) return true;
+
+  return aa.length >= 4 && bb.length >= 4 && (aa.endsWith(bb) || bb.endsWith(aa));
 }
 
 function aliasesIn(text: string) {
@@ -108,20 +143,26 @@ function parseGameLinks(html: string, date: string, requestedTeam: string): Game
     const first = teams[0];
     const second = teams[1];
     const between = anchor.text.slice(first.index + first.alias.length, second.index).replace(/\s+/g, " ").trim();
-    const match = between.match(/^(\d{1,2})\s+Game\s+\d+\s+(.+?)\s+(\d{1,2})$/i);
+    const match = between.match(/^(\d{1,2})\s+Game\s+(\d+)\s+(.+?)\s+(\d{1,2})$/i);
     if (!match) continue;
 
-    // NPB 날짜별 일정 표는 첫 번째 팀이 원정, 두 번째 팀이 홈입니다.
-    // 공식 박스스코어도 타격/투수 기록을 원정팀 → 홈팀 순서로 배치합니다.
-    const awayTeam = first.ko;
-    const homeTeam = second.ko;
+    // NPB 일정 페이지는 첫 번째 팀이 홈, 두 번째 팀이 원정입니다.
+    // 예: Hiroshima 2 Game 15 Mazda Stadium 4 Hanshin => 홈 Hiroshima / 원정 Hanshin
+    const homeTeam = first.ko;
+    const awayTeam = second.ko;
     const side: "home" | "away" = requestedTeam === homeTeam ? "home" : "away";
     const opponent = requestedTeam === homeTeam ? awayTeam : homeTeam;
     const href = anchor.href.startsWith("http")
       ? anchor.href
       : new URL(anchor.href, `https://npb.jp/bis/eng/${year}/games/`).toString();
+    const gameNo = match[2];
+    const homeCode = SCORE_TEAM_CODES[homeTeam] || "";
+    const awayCode = SCORE_TEAM_CODES[awayTeam] || "";
+    const scoreUrl = homeCode && awayCode
+      ? `https://npb.jp/scores/${year}/${date.slice(5, 7)}${date.slice(8, 10)}/${homeCode}-${awayCode}-${gameNo}/box.html`
+      : "";
 
-    links.push({ url: href, date, opponent, venue: venueKo(match[2]), side });
+    links.push({ url: href, scoreUrl, date, opponent, venue: venueKo(match[3]), side });
   }
   return links;
 }
@@ -179,108 +220,278 @@ type ParsedPitchingRow = {
   pitches: number | null;
 };
 
-function parsePitchingRows(table: string): ParsedPitchingRow[] {
-  const rows = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
-  if (!rows.length) return [];
+function parseModernScorePitchingRows(table: string): ParsedPitchingRow[] {
+  const rawRows = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
+  const rows = rawRows.map((raw) => ({ raw, cells: tableCells(raw) }))
+    .map(({ raw, cells }) => ({ raw, cells, texts: cells.map((cell) => cell.text.trim()) }));
+  const headerRowIndex = rows.findIndex((row) => {
+    const keys = row.texts.map(headerKey);
+    return keys.includes("投手") && keys.includes("投球数") && keys.includes("打者")
+      && keys.includes("投球回") && keys.includes("三振") && keys.includes("自責点");
+  });
+  if (headerRowIndex < 0) return [];
 
-  const headerCells = rows
-    .map((row) => tableCells(row).map((cell) => cell.text.trim()))
-    .find((cells) => {
-      const keys = cells.map(headerKey);
-      return keys.some((key) => ["ip", "投球回", "回"].includes(key))
-        && keys.some((key) => ["er", "自責点", "自責"].includes(key));
-    }) ?? [];
-
-  const findHeader = (aliases: string[]) => headerIndex(headerCells, aliases);
-  let indexes = {
-    innings: findHeader(["IP", "投球回", "回"]),
-    batters: findHeader(["BF", "打者", "対打者"]),
-    pitches: findHeader(["NP", "Pitches", "Pitch", "球数"]),
-    hits: findHeader(["H", "被安打", "安打"]),
-    walks: findHeader(["BB", "四球", "与四球"]),
-    hitByPitch: findHeader(["HB", "HBP", "死球", "与死球"]),
-    strikeouts: findHeader(["SO", "K", "三振", "奪三振"]),
-    runs: findHeader(["R", "失点"]),
-    earnedRuns: findHeader(["ER", "自責点", "自責"]),
+  const headers = rows[headerRowIndex].texts.map(headerKey);
+  const pos = (aliases: string[]) => headerIndex(headers, aliases);
+  const positions = {
+    pitcher: pos(["投手"]),
+    pitches: pos(["投球数", "球数"]),
+    batters: pos(["打者", "対打者"]),
+    innings: pos(["投球回", "回"]),
+    hits: pos(["安打", "被安打"]),
+    walks: pos(["四球", "与四球"]),
+    hitByPitch: pos(["死球", "与死球"]),
+    strikeouts: pos(["三振", "奪三振"]),
+    runs: pos(["失点"]),
+    earnedRuns: pos(["自責点", "自責"]),
   };
 
-  // NPB 영문 페이지는 헤더를 IP 행과 BF/H/BB/HB/SO/ER 행으로 나눠 놓는다.
-  // 이 경우 한 행에서 헤더를 찾을 수 없으므로 공식 고정 순서를 사용한다.
-  if (indexes.innings < 0 || indexes.earnedRuns < 0) {
-    const text = cleanHtml(table).replace(/\s+/g, " ");
-    if (/\bIP\b/i.test(text) && /\bBF\b/i.test(text) && /\bSO\b/i.test(text) && /\bER\b/i.test(text)) {
-      indexes = { innings: 1, batters: 2, pitches: -1, hits: 3, walks: 4, hitByPitch: 5, strikeouts: 6, runs: -1, earnedRuns: 7 };
-    } else {
-      return [];
-    }
-  }
-
   const parsed: ParsedPitchingRow[] = [];
-  for (const rawRow of rows) {
-    const cells = tableCells(rawRow);
-    if (cells.length < 3) continue;
-
-    const texts = cells.map((cell) => cell.text.trim());
-    const rowKeys = texts.map(headerKey);
-    if (rowKeys.some((key) => key === "ip" || key === "投球回")) continue;
-
-    // NPB 경기 박스스코어의 투수 이름은 링크가 없는 일반 td인 경우가 대부분이다.
-    // 기존 코드는 선수 링크가 있는 타격 행만 골라 잘못된 숫자를 투수 기록으로 읽었다.
-    const firstStatHeader = [indexes.innings, indexes.batters, indexes.pitches, indexes.hits]
-      .filter((value) => value >= 0)
-      .sort((a, b) => a - b)[0] ?? 1;
-    const nameIndex = Math.max(0, firstStatHeader - 1);
-    const rawName = texts[nameIndex] || texts[0] || "";
-    if (!rawName || /^pitcher$/i.test(rawName) || /^(投手|合計)$/.test(rawName)) continue;
-
-    const shift = nameIndex + 1 - firstStatHeader;
-    const valueAt = (headerPosition: number) => {
-      if (headerPosition < 0) return "";
-      return texts[headerPosition + shift] || "";
-    };
-
-    const inningsOuts = parseInnings(valueAt(indexes.innings));
-    if (inningsOuts <= 0 || inningsOuts > 36) continue;
-
-    const decisionCode = rawName.match(/\((W|L|S|H)\)/i)?.[1]?.toUpperCase()
-      || rawName.match(/(?:^|\s)(勝|敗)(?:\s|$)/)?.[1]
+  for (const row of rows.slice(headerRowIndex + 1)) {
+    if (row.texts.some((text) => /チーム計/.test(text))) break;
+    const pitcherCell = row.cells[positions.pitcher];
+    if (!pitcherCell) continue;
+    const playerCode = pitcherCell.html.match(/\/players\/(\d+)\.html/i)?.[1]
+      || pitcherCell.html.match(/\/bis\/(?:eng\/)?players\/(\d+)\.html/i)?.[1]
       || "";
-    const cleanName = rawName
-      .replace(/,?\s*\((?:W|L|S|H)(?:[^)]*)\)\s*/gi, "")
-      .replace(/(?:^|\s)(勝|敗)(?:\s|$)/g, " ")
-      .trim();
-    const playerCode = cells[nameIndex]?.html.match(/\/players\/(\d+)\.html/i)?.[1] || "";
-    const pitchCount = n(valueAt(indexes.pitches));
-    const earnedRuns = n(valueAt(indexes.earnedRuns));
-    const runsText = valueAt(indexes.runs);
-
+    const rawName = pitcherCell.text.trim();
+    if (!rawName || rawName === "投手") continue;
+    const inningsOuts = parseInnings(row.texts[positions.innings] || "");
+    if (inningsOuts <= 0 || inningsOuts > 36) continue;
+    const decisionMark = row.texts[0]?.trim() || "";
     parsed.push({
-      starterOriginalName: cleanName,
+      starterOriginalName: rawName,
       playerCode,
       inningsOuts,
-      battersFaced: n(valueAt(indexes.batters)),
-      hits: n(valueAt(indexes.hits)),
-      walks: n(valueAt(indexes.walks)),
-      hitByPitch: n(valueAt(indexes.hitByPitch)),
-      strikeouts: n(valueAt(indexes.strikeouts)),
-      earnedRuns,
-      runs: runsText ? n(runsText) : earnedRuns,
-      decision: decisionCode === "W" || decisionCode === "勝" ? "승" : decisionCode === "L" || decisionCode === "敗" ? "패" : "-",
-      pitches: pitchCount > 0 ? pitchCount : null,
+      battersFaced: n(row.texts[positions.batters]),
+      hits: n(row.texts[positions.hits]),
+      walks: n(row.texts[positions.walks]),
+      hitByPitch: n(row.texts[positions.hitByPitch]),
+      strikeouts: n(row.texts[positions.strikeouts]),
+      earnedRuns: n(row.texts[positions.earnedRuns]),
+      runs: n(row.texts[positions.runs]),
+      decision: /○|勝/.test(decisionMark) ? "승" : /●|敗/.test(decisionMark) ? "패" : "-",
+      pitches: n(row.texts[positions.pitches]) || null,
     });
   }
   return parsed;
 }
 
+function parsePitchingRows(table: string): ParsedPitchingRow[] {
+  const rawRows = table.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
+  const rows = rawRows.map((raw) => ({ raw, cells: tableCells(raw) }))
+    .map(({ raw, cells }) => ({ raw, cells, texts: cells.map((cell) => cell.text.trim()).filter(Boolean) }))
+    .filter((row) => row.texts.length > 0);
+  if (!rows.length) return [];
+
+  const isInningsHeader = (texts: string[]) => texts.some((text) => ["ip", "投球回", "回"].includes(headerKey(text)));
+  const isStatsHeader = (texts: string[]) => {
+    const keys = texts.map(headerKey);
+    return keys.includes("bf") && keys.includes("h") && keys.includes("bb") && keys.includes("so") && keys.includes("er")
+      || keys.some((key) => ["打者", "対打者"].includes(key))
+        && keys.some((key) => ["被安打", "安打"].includes(key))
+        && keys.some((key) => ["四球", "与四球"].includes(key))
+        && keys.some((key) => ["三振", "奪三振"].includes(key))
+        && keys.some((key) => ["自責点", "自責"].includes(key));
+  };
+
+  const numeric = (value: string) => /^-?(?:\d+(?:\.\d+)?|\.\d+|\d+\s+[12]\/3|[12]\/3)$/.test(value.trim());
+  const parseOutsFromTokens = (tokens: string[]) => {
+    if (!tokens.length) return { outs: 0, used: 0 };
+    const first = tokens[0].trim();
+    if (/^\d+$/.test(first) && tokens[1] && /^\.[12]$/.test(tokens[1].trim())) {
+      return { outs: Number(first) * 3 + Number(tokens[1].trim().slice(1)), used: 2 };
+    }
+    const outs = parseInnings(first);
+    return { outs, used: outs > 0 ? 1 : 0 };
+  };
+
+  const parsed: ParsedPitchingRow[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    if (!isInningsHeader(rows[i].texts)) { i += 1; continue; }
+
+    let statsHeaderIndex = i + 1;
+    while (statsHeaderIndex < rows.length && statsHeaderIndex <= i + 3 && !isStatsHeader(rows[statsHeaderIndex].texts)) {
+      statsHeaderIndex += 1;
+    }
+    if (statsHeaderIndex >= rows.length || !isStatsHeader(rows[statsHeaderIndex].texts)) { i += 1; continue; }
+
+    const statHeaders = rows[statsHeaderIndex].texts.map(headerKey);
+    const statPos = (aliases: string[]) => statHeaders.findIndex((key) => aliases.map(headerKey).includes(key));
+    const positions = {
+      batters: statPos(["BF", "打者", "対打者"]),
+      hits: statPos(["H", "被安打", "安打"]),
+      walks: statPos(["BB", "四球", "与四球"]),
+      hitByPitch: statPos(["HB", "HBP", "死球", "与死球"]),
+      strikeouts: statPos(["SO", "K", "三振", "奪三振"]),
+      runs: statPos(["R", "失点"]),
+      earnedRuns: statPos(["ER", "自責点", "自責"]),
+      pitches: statPos(["NP", "Pitches", "Pitch", "球数"]),
+    };
+
+    let rowIndex = statsHeaderIndex + 1;
+    while (rowIndex < rows.length) {
+      const current = rows[rowIndex];
+      if (isInningsHeader(current.texts) || isStatsHeader(current.texts)) break;
+      if (current.texts.length === 1 && /^[|｜]$/.test(current.texts[0])) { rowIndex += 1; continue; }
+
+      const nameIndex = current.texts.findIndex((text) => !numeric(text) && !/^[|｜-]$/.test(text));
+      if (nameIndex < 0) { rowIndex += 1; continue; }
+
+      const rawName = current.texts[nameIndex];
+      if (/^(pitcher|投手)$/i.test(rawName)) { rowIndex += 1; continue; }
+
+      const afterName = current.texts.slice(nameIndex + 1);
+      const inningsParsed = parseOutsFromTokens(afterName);
+      if (inningsParsed.outs <= 0 || inningsParsed.outs > 36) { rowIndex += 1; continue; }
+
+      let statValues = afterName.slice(inningsParsed.used).filter(numeric);
+      let consumedNext = false;
+      if (statValues.length < 6 && rows[rowIndex + 1]) {
+        const nextTexts = rows[rowIndex + 1].texts.filter(numeric);
+        if (nextTexts.length >= 6) {
+          statValues = nextTexts;
+          consumedNext = true;
+        }
+      }
+      if (statValues.length < 6) { rowIndex += 1; continue; }
+
+      const valueAt = (position: number) => position >= 0 ? (statValues[position] || "") : "";
+      const decisionCode = rawName.match(/\((W|L|S|H)\)/i)?.[1]?.toUpperCase()
+        || rawName.match(/(?:^|\s)(勝|敗)(?:\s|$)/)?.[1]
+        || "";
+      const playerCode = current.cells.map((cell) => cell.html).join(" ").match(/\/players\/(\d+)\.html/i)?.[1] || "";
+      const pitchCount = n(valueAt(positions.pitches));
+
+      parsed.push({
+        starterOriginalName: rawName.replace(/\s*\((?:W|L|S|H)(?:[^)]*)\)\s*/gi, "").trim(),
+        playerCode,
+        inningsOuts: inningsParsed.outs,
+        battersFaced: n(valueAt(positions.batters)),
+        hits: n(valueAt(positions.hits)),
+        walks: n(valueAt(positions.walks)),
+        hitByPitch: n(valueAt(positions.hitByPitch)),
+        strikeouts: n(valueAt(positions.strikeouts)),
+        earnedRuns: n(valueAt(positions.earnedRuns)),
+        runs: n(valueAt(positions.runs)),
+        decision: decisionCode === "W" || decisionCode === "勝" ? "승" : decisionCode === "L" || decisionCode === "敗" ? "패" : "-",
+        pitches: pitchCount > 0 ? pitchCount : null,
+      });
+
+      rowIndex += consumedNext ? 2 : 1;
+    }
+    i = Math.max(rowIndex, i + 1);
+  }
+
+  return parsed;
+}
+
+
+
+/**
+ * NPB scores 페이지의 투수 행은 데스크톱/모바일용 중첩 표 때문에 일반적인
+ * <tr><td> 파싱으로는 투구수·이닝과 나머지 통계가 갈라집니다.
+ * 전체 HTML의 선수 링크를 기준점으로 삼고, 그 뒤에 연속해서 나오는 숫자 셀을
+ * 원래 공식 헤더 순서대로 읽습니다.
+ */
+function parseScorePitcherByPlayerCode(html: string, requestedPlayerCode: string): ParsedPitchingRow | null {
+  if (!html || !requestedPlayerCode) return null;
+
+  const marked = html.replace(
+    /<a\b([^>]*href=["'][^"']*\/bis\/players\/(\d+)\.html[^"']*["'][^>]*)>([\s\S]*?)<\/a>/gi,
+    (_all, _attrs, code, label) => `\n@@NPB_PLAYER:${code}:${cleanHtml(label)}@@\n`,
+  );
+
+  const plain = marked
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:td|th|tr|table|tbody|thead|tfoot|div|p|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_all, code) => String.fromCharCode(Number(code)));
+
+  const tokens = plain.split(/\r?\n/).map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const marker = new RegExp(`^@@NPB_PLAYER:${requestedPlayerCode.replace(/[^0-9]/g, "")}:([\\s\\S]*?)@@$`);
+  const numericToken = /^-?(?:\d+(?:\.\d+)?|\.\d+|\d+\s+[12]\/3|[12]\/3)$/;
+
+  for (let markerIndex = 0; markerIndex < tokens.length; markerIndex += 1) {
+    const markerMatch = tokens[markerIndex].match(marker);
+    if (!markerMatch) continue;
+
+    const values: string[] = [];
+    for (let index = markerIndex + 1; index < tokens.length && index <= markerIndex + 30; index += 1) {
+      const token = tokens[index];
+      if (/^@@NPB_PLAYER:/.test(token) || /チーム計/.test(token)) break;
+
+      // 한 셀 안에 "0 .2"처럼 이닝이 둘로 표시되는 경우까지 분리한다.
+      const pieces = token.match(/-?\d+(?:\.\d+)?|\.\d+|[12]\/3/g) || [];
+      if (!pieces.length) {
+        if (values.length > 0 && !/^[○●HS勝敗-]$/.test(token)) break;
+        continue;
+      }
+      if (pieces.every((piece) => numericToken.test(piece))) values.push(...pieces);
+      if (values.length >= 13) break;
+    }
+
+    // 투구수, 타자, 이닝, H, HR, BB, HBP, SO, WP, BK, R, ER
+    if (values.length < 12) continue;
+    const pitches = n(values[0]);
+    const battersFaced = n(values[1]);
+    let inningsValue = values[2];
+    let statStart = 3;
+    if (/^\d+$/.test(values[2]) && /^\.[12]$/.test(values[3] || "")) {
+      inningsValue = `${values[2]}${values[3]}`;
+      statStart = 4;
+    }
+    const inningsOuts = parseInnings(inningsValue);
+    const stats = values.slice(statStart, statStart + 9).map(n);
+    if (stats.length < 9) continue;
+    const [hits, _homeRuns, walks, hitByPitch, strikeouts, _wildPitches, _balks, runs, earnedRuns] = stats;
+
+    // 같은 선수 링크는 타격표에도 있으므로 투수 기록으로 가능한 값만 채택한다.
+    if (pitches <= 0 || pitches > 250 || battersFaced <= 0 || battersFaced > 100) continue;
+    if (inningsOuts <= 0 || inningsOuts > 36) continue;
+    if ([hits, walks, hitByPitch, strikeouts, runs, earnedRuns].some((value) => value < 0 || value > 50)) continue;
+    if (hits > battersFaced || walks > battersFaced || strikeouts > battersFaced || earnedRuns > runs) continue;
+
+    const before = tokens.slice(Math.max(0, markerIndex - 3), markerIndex).join(" ");
+    const decision = /○|勝/.test(before) ? "승" : /●|敗/.test(before) ? "패" : "-";
+
+    return {
+      starterOriginalName: markerMatch[1].trim(),
+      playerCode: requestedPlayerCode,
+      inningsOuts,
+      battersFaced,
+      hits,
+      walks,
+      hitByPitch,
+      strikeouts,
+      earnedRuns,
+      runs,
+      decision,
+      pitches,
+    };
+  }
+
+  return null;
+}
+
 function selectPitcherRow(table: string, originalName: string, koName: string, playerCode = "") {
-  const rows = parsePitchingRows(table);
+  const rows = [...parseModernScorePitchingRows(table), ...parsePitchingRows(table)];
   if (!rows.length) return null;
 
   // MLB gameLog처럼 해당 선수의 경기 행만 사용한다. 팀 투수표 첫 행을 무조건
   // 가져오던 기존 방식 때문에 모든 날짜가 다른 선발투수의 기록으로 섞였다.
   if (playerCode) {
     const byCode = rows.find((row) => row.playerCode === playerCode);
-    if (byCode) return byCode;
+    // 선수 코드가 전달된 경우에는 성(Mori, Maeda 등) 비교로 절대 내려가지 않는다.
+    // 같은 성을 가진 다른 투수 기록이 섞이는 문제의 직접 원인이었다.
+    return byCode ?? null;
   }
   const requested = [originalName, koName, playerNameKo(originalName)].filter(Boolean);
   return rows.find((row) => requested.some((name) =>
@@ -309,51 +520,64 @@ async function getText(url: string, revalidate: number) {
 }
 
 async function appearanceFromGame(game: GameLink, originalName: string, koName: string, playerCode = ""): Promise<Appearance | null> {
+  // 새 NPB 공식 score 페이지는 playerCode와 투구수를 같은 투수표에 제공한다.
+  const scoreHtml = game.scoreUrl ? await getText(game.scoreUrl, 21600) : "";
   const englishHtml = await getText(game.url, 21600);
-  if (!englishHtml) return null;
+  if (!scoreHtml && !englishHtml) return null;
 
-  const englishTables = pitchingTables(englishHtml);
-  const englishTeamTable = game.side === "away" ? englishTables[0] : englishTables[1];
-  if (!englishTeamTable) return null;
+  let parsed: ReturnType<typeof selectPitcherRow> = null;
+  // playerCode가 있으면 공식 scores HTML 전체에서 선수 링크 뒤 숫자 스트림을 직접 읽는다.
+  // 타격표의 동일 선수 링크는 12개 연속 투수 통계가 없어 자동 제외된다.
+  if (scoreHtml && playerCode) parsed = parseScorePitcherByPlayerCode(scoreHtml, playerCode);
 
-  const englishRows = parsePitchingRows(englishTeamTable);
-  const starterRow = englishRows[0];
-  if (!starterRow) return null;
-
-  // 최근 '선발' 등판만 표시한다. 팀의 첫 번째 투수와 요청 투수가 다르면 제외한다.
-  const requestedNames = [originalName, koName, playerNameKo(originalName)].filter(Boolean);
-  const codeMatches = Boolean(playerCode && starterRow.playerCode && starterRow.playerCode === playerCode);
-  const nameMatches = requestedNames.some((name) =>
-    samePitcher(starterRow.starterOriginalName, name)
-    || samePitcher(playerNameKo(starterRow.starterOriginalName), name),
-  );
-  if (!codeMatches && !nameMatches) return null;
-
-  let pitches = starterRow.pitches;
-  if (pitches == null) {
-    const japaneseUrl = game.url.replace("/bis/eng/", "/bis/");
-    if (japaneseUrl !== game.url) {
-      const japaneseHtml = await getText(japaneseUrl, 21600);
-      const japaneseTables = japaneseHtml ? pitchingTables(japaneseHtml) : [];
-      const japaneseTeamTable = game.side === "away" ? japaneseTables[0] : japaneseTables[1];
-      const japaneseStarter = japaneseTeamTable ? parsePitchingRows(japaneseTeamTable)[0] : null;
-      if (japaneseStarter?.pitches != null) pitches = japaneseStarter.pitches;
+  // 일본어 scores 페이지는 수치 기록은 정확하지만 일부 경기에서 승/패 표시가
+  // 선수 숫자 스트림 주변에 포함되지 않는다. 같은 경기의 영문 박스스코어에는
+  // 선수명 옆 (W)/(L)이 있으므로, 수치는 그대로 두고 판정만 보완한다.
+  let englishDecision = "-";
+  if (englishHtml) {
+    const tables = pitchingTables(englishHtml);
+    const preferredIndex = game.side === "away" ? 0 : 1;
+    const orderedTables = [tables[preferredIndex], ...tables.filter((_, index) => index !== preferredIndex)].filter(Boolean);
+    for (const table of orderedTables) {
+      const candidate = selectPitcherRow(table, originalName, koName, playerCode);
+      if (!candidate) continue;
+      if (candidate.decision === "승" || candidate.decision === "패") englishDecision = candidate.decision;
+      if (!parsed) parsed = candidate;
+      break;
     }
   }
 
-  const innings = starterRow.inningsOuts / 3;
+  // scores 페이지에서 이미 수치를 찾았다면 영문 페이지는 승패만 합친다.
+  if (parsed && parsed.decision === "-" && englishDecision !== "-") {
+    parsed = { ...parsed, decision: englishDecision };
+  }
+
+  // scores/영문 어느 쪽에서도 아직 선수를 못 찾았을 때만 기존 표 파서를 사용한다.
+  if (!parsed && scoreHtml) {
+    const tables = pitchingTables(scoreHtml);
+    const preferredIndex = game.side === "away" ? 0 : 1;
+    const orderedTables = [tables[preferredIndex], ...tables.filter((_, index) => index !== preferredIndex)].filter(Boolean);
+    for (const table of orderedTables) {
+      parsed = selectPitcherRow(table, originalName, koName, playerCode);
+      if (parsed) break;
+    }
+  }
+  // 해당 투수가 실제로 등판하지 않은 경기는 최근 등판 기록에 넣지 않는다.
+  if (!parsed) return null;
+
+  const innings = parsed.inningsOuts / 3;
   return {
     ...game,
-    inningsOuts: starterRow.inningsOuts,
-    innings: outsToInnings(starterRow.inningsOuts),
-    hits: starterRow.hits,
-    walks: starterRow.walks,
-    hitByPitch: starterRow.hitByPitch,
-    strikeouts: starterRow.strikeouts,
-    earnedRuns: starterRow.earnedRuns,
-    era: innings ? starterRow.earnedRuns * 9 / innings : 0,
-    decision: starterRow.decision,
-    pitches,
+    inningsOuts: parsed.inningsOuts,
+    innings: outsToInnings(parsed.inningsOuts),
+    hits: parsed.hits,
+    walks: parsed.walks,
+    hitByPitch: parsed.hitByPitch,
+    strikeouts: parsed.strikeouts,
+    earnedRuns: parsed.earnedRuns,
+    era: innings ? parsed.earnedRuns * 9 / innings : 0,
+    decision: parsed.decision,
+    pitches: parsed.pitches,
   };
 }
 
@@ -440,8 +664,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      source: "NPB 공식 경기별 박스스코어(선수 코드·헤더 기반 파싱)",
-      parserVersion: "npb-pitcher-history-v6-starter-row-correct-team-order",
+      source: "NPB 공식 scores 경기별 박스스코어(playerCode·투구수 기반)",
+      parserVersion: "npb-pitcher-history-v22-decision-english-fallback",
       pitcher: koName,
       recent10: { ...aggregate(recentItems), gamesDetail: recentItems },
       recent5: { ...aggregate(recentItems.slice(0, 5)), gamesDetail: recentItems.slice(0, 5) },

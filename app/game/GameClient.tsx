@@ -2100,18 +2100,22 @@ function HeadToHeadComparison({
   const awayWins = games.filter((game) => Number(game.teamScore) > Number(game.opponentScore)).length;
   const homeWins = games.filter((game) => Number(game.teamScore) < Number(game.opponentScore)).length;
   const draws = games.filter((game) => Number(game.teamScore) === Number(game.opponentScore)).length;
-  const isTie = awayWins === homeWins;
-  const leaderName = awayWins > homeWins ? awayName : homeName;
-  const teamClass = (name: string) =>
-    isTie ? (name === awayName ? "text-red-400" : "text-blue-400") : name === leaderName ? "text-red-400" : "text-blue-400";
+
+  // KBO 맞대결 전용 색상: 원정팀=빨강, 홈팀=파랑.
+  // 각 경기에서는 승리한 팀만 해당 색상과 큰 글씨로 강조한다.
+  const teamColor = (name: string) => name === awayName ? "text-red-400" : "text-blue-400";
+  const teamResultClass = (name: string, winner: string) =>
+    name === winner ? `${teamColor(name)} text-lg font-black sm:text-xl` : "text-sm font-bold text-slate-200 sm:text-base";
+  const scoreResultClass = (name: string, winner: string) =>
+    name === winner ? `${teamColor(name)} text-xl font-black sm:text-2xl` : "text-sm font-bold text-slate-300 sm:text-base";
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
       <h3 className="text-xl font-black">최근 맞대결 {games.length}경기</h3>
       <p className="mt-2 text-sm font-black">
-        <span className={teamClass(awayName)}>{awayName} {awayWins}승</span>
+        <span className="text-red-400">{awayName} {awayWins}승</span>
         <span className="text-slate-500"> · </span>
-        <span className={teamClass(homeName)}>{homeName} {homeWins}승</span>
+        <span className="text-blue-400">{homeName} {homeWins}승</span>
         {draws > 0 ? <span className="text-slate-400"> · {draws}무</span> : null}
       </p>
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-800">
@@ -2119,14 +2123,17 @@ function HeadToHeadComparison({
           const isAwayHome = game.location === "홈";
           const homeTeam = isAwayHome ? awayName : game.opponent;
           const awayTeam = isAwayHome ? game.opponent : awayName;
-          const homeScore = isAwayHome ? game.teamScore : game.opponentScore;
-          const awayScore = isAwayHome ? game.opponentScore : game.teamScore;
+          const homeScore = Number(isAwayHome ? game.teamScore : game.opponentScore);
+          const awayScore = Number(isAwayHome ? game.opponentScore : game.teamScore);
+          const winner = homeScore === awayScore ? "" : homeScore > awayScore ? homeTeam : awayTeam;
           return (
             <div key={`${game.date}-${index}`} className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-slate-800 px-3 py-2.5 last:border-b-0 sm:grid-cols-[1fr_90px]">
-              <div className="min-w-0 text-center font-black">
-                <span className={teamClass(homeTeam)}>{homeTeam}</span>
-                <span className="mx-2 text-slate-500">{homeScore} : {awayScore}</span>
-                <span className={teamClass(awayTeam)}>{awayTeam}</span>
+              <div className="flex min-w-0 items-baseline justify-center gap-2 text-center">
+                <span className={teamResultClass(homeTeam, winner)}>{homeTeam}</span>
+                <span className={scoreResultClass(homeTeam, winner)}>{homeScore}</span>
+                <span className="text-sm font-bold text-slate-500">:</span>
+                <span className={scoreResultClass(awayTeam, winner)}>{awayScore}</span>
+                <span className={teamResultClass(awayTeam, winner)}>{awayTeam}</span>
               </div>
               <span className="text-right text-xs text-slate-500">{String(game.date).slice(5)}</span>
             </div>

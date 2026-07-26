@@ -161,16 +161,34 @@ function MatchupCard({away,home,h2h}:{away:string;home:string;h2h?:HeadToHead}){
    if(currentAwayScore>currentHomeScore)awayWins++; else if(currentAwayScore<currentHomeScore)homeWins++; else draws++;
  }
  const gameCount=rows.length;
- const leader=awayWins>homeWins?away:homeWins>awayWins?home:"";
- const teamClass=(name:string)=>!leader?"text-blue-400":name===leader?"text-red-400":"text-blue-400";
+ // MLB 맞대결 전용 색상: 원정팀=파랑, 홈팀=빨강.
+ // 각 경기에서는 승리한 팀만 해당 색상과 큰 글씨로 강조한다.
+ const teamColor=(name:string)=>name===away?"text-blue-400":"text-red-400";
+ const teamResultClass=(name:string,winner:string)=>name===winner?`${teamColor(name)} text-lg font-black sm:text-xl`:"text-sm font-bold text-slate-200 sm:text-base";
+ const scoreResultClass=(name:string,winner:string)=>name===winner?`${teamColor(name)} text-xl font-black sm:text-2xl`:"text-sm font-bold text-slate-300 sm:text-base";
  return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
   <h3 className="text-xl font-black">이번 시즌 맞대결 {gameCount}경기</h3>
-  <p className="mt-2 text-sm font-black"><span className={teamClass(away)}>{away} {awayWins}승 {homeWins}패</span><span className="text-slate-500"> · </span><span className={teamClass(home)}>{home} {homeWins}승 {awayWins}패</span>{draws?<span className="text-slate-400"> · {draws}무</span>:null}</p>
+  <p className="mt-2 text-sm font-black"><span className="text-blue-400">{away} {awayWins}승 {homeWins}패</span><span className="text-slate-500"> · </span><span className="text-red-400">{home} {homeWins}승 {awayWins}패</span>{draws?<span className="text-slate-400"> · {draws}무</span>:null}</p>
   <div className="mt-5 overflow-hidden rounded-xl border border-slate-800">
-   {rows.length?rows.map((g,i)=><div key={`${g.date}-${i}`} className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-slate-800 px-3 py-3 last:border-b-0 sm:grid-cols-[1fr_90px]"><div className="min-w-0 text-center font-black"><span className={teamClass(g.away)}>{g.away}</span><span className="mx-2 text-slate-500">{g.awayScore} : {g.homeScore}</span><span className={teamClass(g.home)}>{g.home}</span></div><span className="text-right text-xs text-slate-500">{String(g.date).slice(5)}</span></div>):<p className="p-5 text-center text-sm text-slate-500">최근 맞대결 기록이 없습니다.</p>}
+   {rows.length?rows.map((g,i)=>{
+     const awayScore=Number(g.awayScore??0);
+     const homeScore=Number(g.homeScore??0);
+     const winner=awayScore===homeScore?"":awayScore>homeScore?g.away:g.home;
+     return <div key={`${g.date}-${i}`} className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-slate-800 px-3 py-3 last:border-b-0 sm:grid-cols-[1fr_90px]">
+       <div className="flex min-w-0 items-baseline justify-center gap-2 text-center">
+         <span className={teamResultClass(g.away,winner)}>{g.away}</span>
+         <span className={scoreResultClass(g.away,winner)}>{awayScore}</span>
+         <span className="text-sm font-bold text-slate-500">:</span>
+         <span className={scoreResultClass(g.home,winner)}>{homeScore}</span>
+         <span className={teamResultClass(g.home,winner)}>{g.home}</span>
+       </div>
+       <span className="text-right text-xs text-slate-500">{String(g.date).slice(5)}</span>
+     </div>
+   }):<p className="p-5 text-center text-sm text-slate-500">최근 맞대결 기록이 없습니다.</p>}
   </div>
  </div>
 }
+
 
 function Content(){
   const q=useSearchParams();const date=q.get("date")??"";const time=q.get("time")??"";const away=q.get("away")??"원정팀";const home=q.get("home")??"홈팀";const awayApi=q.get("awayApiName")??away;const homeApi=q.get("homeApiName")??home;const commenceTime=q.get("commenceTime")??"";const stadium=q.get("stadium")??"";const awayStarter=q.get("awayStarter")??"";const homeStarter=q.get("homeStarter")??"";const awayTeamId=Number(q.get("awayTeamId")??0);const homeTeamId=Number(q.get("homeTeamId")??0);const awayStarterId=Number(q.get("awayStarterCode")??0);const homeStarterId=Number(q.get("homeStarterCode")??0);

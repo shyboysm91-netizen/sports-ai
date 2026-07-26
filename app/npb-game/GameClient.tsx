@@ -289,41 +289,121 @@ function HeadToHeadPanel({ away, home, data }: { away: string; home: string; dat
       return Number.isFinite(homeScore) && Number.isFinite(awayScore) && !(homeScore === 0 && awayScore === 0);
     })
     .slice(0, 10);
-  const awayWins = games.filter((game: any) => game.awayTeam === away ? Number(game.awayScore) > Number(game.homeScore) : Number(game.homeScore) > Number(game.awayScore)).length;
-  const homeWins = games.filter((game: any) => game.homeTeam === home ? Number(game.homeScore) > Number(game.awayScore) : Number(game.awayScore) > Number(game.homeScore)).length;
+
+  const scoreFor = (game: any, team: string) =>
+    game.homeTeam === team ? Number(game.homeScore) : Number(game.awayScore);
+  const scoreAgainst = (game: any, team: string) =>
+    game.homeTeam === team ? Number(game.awayScore) : Number(game.homeScore);
+
+  const awayWins = games.filter((game: any) => scoreFor(game, away) > scoreAgainst(game, away)).length;
+  const homeWins = games.filter((game: any) => scoreFor(game, home) > scoreAgainst(game, home)).length;
   const draws = games.filter((game: any) => Number(game.homeScore) === Number(game.awayScore)).length;
-  const isTie = awayWins === homeWins;
-  const leader = awayWins > homeWins ? away : home;
-  const teamClass = (name: string) => isTie ? "text-slate-200" : name === leader ? "text-red-400" : "text-blue-400";
+  const awayLosses = games.length - awayWins - draws;
+  const homeLosses = games.length - homeWins - draws;
+  const awayRuns = games.reduce((sum: number, game: any) => sum + scoreFor(game, away), 0);
+  const homeRuns = games.reduce((sum: number, game: any) => sum + scoreFor(game, home), 0);
+  const decidedGames = Math.max(1, games.length - draws);
+  const awayRate = Math.round((awayWins / decidedGames) * 100);
+  const homeRate = Math.round((homeWins / decidedGames) * 100);
 
   return (
     <Card title="최근 맞대결 10경기">
       {games.length ? (
         <>
-          <p className="mt-2 text-sm font-black">
-            <span className={teamClass(away)}>{shortTeamName(away)} {awayWins}승</span>
-            <span className="text-slate-500"> · </span>
-            <span className={teamClass(home)}>{shortTeamName(home)} {homeWins}승</span>
-            {draws ? <span className="text-slate-400"> · {draws}무</span> : null}
-          </p>
-          <div className="mt-4 overflow-hidden rounded-xl border border-slate-800">
-            {games.slice(0, 10).map((game: any, index: number) => (
-              <div key={`${game.date}-${index}`} className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-slate-800 px-3 py-3 last:border-b-0 sm:grid-cols-[1fr_90px]">
-                <div className="min-w-0 text-center font-black">
-                  <span className={teamClass(game.homeTeam)}>{shortTeamName(game.homeTeam)}</span>
-                  <span className="mx-2 text-slate-500">{game.homeScore} : {game.awayScore}</span>
-                  <span className={teamClass(game.awayTeam)}>{shortTeamName(game.awayTeam)}</span>
-                </div>
-                <span className="text-right text-xs text-slate-500">{String(game.date).slice(5)}</span>
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-blue-800/70 bg-blue-950/20 px-4 py-3">
+              <p className="truncate text-sm font-black text-blue-300">{shortTeamName(away)}</p>
+              <p className="mt-1 text-2xl font-black">
+                <span className="text-blue-400">{awayWins}승</span>
+                <span className="mx-1 text-slate-600">·</span>
+                <span className="text-red-400">{awayLosses}패</span>
+                {draws ? <span className="ml-2 text-sm text-slate-400">{draws}무</span> : null}
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-400">득점 {awayRuns} · 실점 {homeRuns} · 승률 {awayRate}%</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-center">
+              <p className="text-xs font-black text-slate-500">전체 전적</p>
+              <p className="mt-1 text-2xl font-black text-white">{games.length}경기</p>
+              <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-slate-800">
+                <div className="bg-blue-600" style={{ width: `${(awayWins / games.length) * 100}%` }} />
+                {draws ? <div className="bg-slate-500" style={{ width: `${(draws / games.length) * 100}%` }} /> : null}
+                <div className="bg-red-600" style={{ width: `${(homeWins / games.length) * 100}%` }} />
               </div>
-            ))}
+              <div className="mt-1 flex justify-between text-[11px] font-black">
+                <span className="text-blue-300">{awayWins}승</span>
+                <span className="text-red-300">{homeWins}승</span>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-red-800/70 bg-red-950/20 px-4 py-3 md:text-right">
+              <p className="truncate text-sm font-black text-red-300">{shortTeamName(home)}</p>
+              <p className="mt-1 text-2xl font-black">
+                <span className="text-red-400">{homeWins}승</span>
+                <span className="mx-1 text-slate-600">·</span>
+                <span className="text-red-400">{homeLosses}패</span>
+                {draws ? <span className="ml-2 text-sm text-slate-400">{draws}무</span> : null}
+              </p>
+              <p className="mt-1 text-xs font-bold text-slate-400">득점 {homeRuns} · 실점 {awayRuns} · 승률 {homeRate}%</p>
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-800">
+            <table className="w-full min-w-[650px] border-collapse text-sm">
+              <thead className="bg-slate-950/70 text-xs font-black text-slate-500">
+                <tr>
+                  <th className="w-20 px-3 py-3 text-center">날짜</th>
+                  <th className="w-28 px-3 py-3 text-center">장소</th>
+                  <th className="px-3 py-3 text-center">경기 결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                {games.map((game: any, index: number) => {
+                  const awayTeamScore = scoreFor(game, away);
+                  const homeTeamScore = scoreFor(game, home);
+                  const awayIsHome = game.homeTeam === away;
+                  const venueText = awayIsHome ? `${shortTeamName(away)} 홈` : `${shortTeamName(home)} 홈`;
+                  const homeWon = Number(game.homeScore) > Number(game.awayScore);
+                  const awayWon = Number(game.awayScore) > Number(game.homeScore);
+
+                  return (
+                    <tr key={`${game.date}-${index}`} className="border-t border-slate-800 first:border-t-0">
+                      <td className="px-3 py-3 text-center font-bold text-slate-300">{String(game.date).slice(5)}</td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${awayIsHome ? "border-blue-800 bg-blue-950/50 text-blue-300" : "border-red-800 bg-red-950/50 text-red-300"}`}>
+                          {venueText}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2 font-black sm:gap-3">
+                          <span className={homeWon ? "text-lg font-black text-red-400 sm:text-xl" : awayWon ? "text-sm font-bold text-slate-300 sm:text-base" : "text-base font-black text-slate-100"}>
+                            {shortTeamName(game.homeTeam)}
+                          </span>
+                          <span className="whitespace-nowrap">
+                            <b className={homeWon ? "text-2xl font-black text-red-400 sm:text-3xl" : awayWon ? "text-base font-bold text-slate-300 sm:text-lg" : "text-xl font-black text-slate-200"}>
+                              {game.homeScore}
+                            </b>
+                            <span className="mx-2 text-base text-slate-600 sm:mx-3">:</span>
+                            <b className={awayWon ? "text-2xl font-black text-blue-400 sm:text-3xl" : homeWon ? "text-base font-bold text-slate-300 sm:text-lg" : "text-xl font-black text-slate-200"}>
+                              {game.awayScore}
+                            </b>
+                          </span>
+                          <span className={awayWon ? "text-lg font-black text-blue-400 sm:text-xl" : homeWon ? "text-sm font-bold text-slate-300 sm:text-base" : "text-base font-black text-slate-100"}>
+                            {shortTeamName(game.awayTeam)}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </>
       ) : <p className="mt-4 text-sm text-slate-500">최근 맞대결 기록을 불러오지 못했습니다.</p>}
     </Card>
   );
 }
-
 
 function ResultBadge({ result }: { result: "승" | "패" | "무" }) {
   return (
@@ -596,7 +676,7 @@ function Content() {
           signal: controller.signal,
         };
 
-        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&awayStarterCode=${encodeURIComponent(awayStarterCode)}&homeStarterCode=${encodeURIComponent(homeStarterCode)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=7`;
+        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&awayStarterCode=${encodeURIComponent(awayStarterCode)}&homeStarterCode=${encodeURIComponent(homeStarterCode)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=11`;
         const [analysisResponse, marketResponse, weatherResponse, scheduleResponse] =
           await Promise.all([
             fetch(dataCacheUrl(`${analysisBase}&fast=1`, 300), baseOptions),
@@ -714,7 +794,7 @@ function Content() {
       homeStarter: resolvedHomeStarter,
       awayStarterCode: String(scheduledGame?.awayStarterCode || awayStarterCode || ""),
       homeStarterCode: String(scheduledGame?.homeStarterCode || homeStarterCode || ""),
-      npbPitcherFix: "6",
+      npbPitcherFix: "11",
     });
     fetch(dataCacheUrl(`/api/npb/analysis?${params.toString()}`, 60), {
       cache: "no-store",

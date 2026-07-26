@@ -12,7 +12,7 @@ export async function GET(request:Request){
   const rawRows = html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
   for(const rawRow of rawRows){
    const row = (rawRow.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) ?? []).map((cell) => cell.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/&#39;/gi, "'").replace(/&quot;/gi, '"').replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
-   const playerCode = rawRow.match(/\/bis\/(?:eng\/)?players\/(\d+)\.html/i)?.[1] || "";
+   const playerCode = rawRow.match(/\/(?:bis\/)?(?:eng\/)?players\/(\d+)\.html/i)?.[1] || "";
    const nameIndex=row.findIndex((cell,i)=>i<4&&/,/.test(cell)&&/[A-Za-z]/.test(cell)); if(nameIndex<0)continue;
    const originalName=row[nameIndex].replace(/^[*+]/,"").trim();
    const s=row.slice(nameIndex+1).map((v)=>v.trim()).filter((v)=>v!=="");
@@ -30,6 +30,6 @@ export async function GET(request:Request){
   const derived=players.map(p=>{const innings=p.inningsOuts/3;return {...p,innings:outsToInnings(p.inningsOuts),whip:innings?(p.hits+p.walks)/innings:0,kPer9:innings?p.strikeouts*9/innings:0,bbPer9:innings?p.walks*9/innings:0}});
   const rotation=[...derived].filter(p=>p.inningsOuts>=3).sort((a,b)=>b.inningsOuts-a.inningsOuts).slice(0,18),bullpen=[...derived].filter(p=>p.games>=8&&p.inningsOuts<Math.max(90,p.games*9)).sort((a,b)=>b.games-a.games).slice(0,8);
   const outs=players.reduce((s,p)=>s+p.inningsOuts,0),earned=players.reduce((s,p)=>s+p.earnedRuns,0),hits=players.reduce((s,p)=>s+p.hits,0),walks=players.reduce((s,p)=>s+p.walks,0);
-  return NextResponse.json({success:true,version:"NPB-v4",source:"NPB 공식 팀별 선수 투수 기록",season,team:team.ko,teamPitching:{innings:outsToInnings(outs),era:outs?earned*27/outs:0,whip:outs?(hits+walks)*3/outs:0},players:derived,rotation,bullpen},{headers:{"Cache-Control":"public, s-maxage=21600, stale-while-revalidate=86400"}});
+  return NextResponse.json({success:true,version:"NPB-v5-playercode",source:"NPB 공식 팀별 선수 투수 기록",season,team:team.ko,teamPitching:{innings:outsToInnings(outs),era:outs?earned*27/outs:0,whip:outs?(hits+walks)*3/outs:0},players:derived,rotation,bullpen},{headers:{"Cache-Control":"public, s-maxage=21600, stale-while-revalidate=86400"}});
  }catch(error){return NextResponse.json({success:false,message:error instanceof Error?error.message:"NPB 투수 기록 오류"},{status:500,headers:{"Cache-Control":"no-store"}})}
 }
