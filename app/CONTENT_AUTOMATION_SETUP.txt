@@ -1,0 +1,61 @@
+SPORTS AI 콘텐츠 자동화 2단계 설정
+
+[이번 버전에서 추가된 기능]
+1. /content에서 캐러셀 6장 PNG 생성
+2. 9:16 릴스 WebM 생성
+3. 공용 캡션 자동 생성
+4. 텔레그램 발행 승인 요청 전송
+5. 텔레그램의 발행 승인 / 취소 버튼 처리
+6. 처리 결과를 텔레그램으로 다시 전송
+7. 승인 링크 위변조 방지 서명 및 24시간 만료
+
+[로컬 확인]
+npm run dev
+http://localhost:3000/content
+관리자 비밀번호: 2580
+
+[텔레그램 기능에 필요한 환경변수]
+TELEGRAM_BOT_TOKEN=BotFather가 발급한 토큰
+TELEGRAM_CHAT_ID=내 텔레그램 채팅 ID
+NEXT_PUBLIC_SITE_URL=https://sports-ai-alpha.vercel.app
+CONTENT_APPROVAL_SECRET=길고 임의의 비밀문자열
+
+주의: 텔레그램에서 승인 버튼을 누르려면 외부에서 접속 가능한 주소가 필요하므로 Vercel 배포 후 작동합니다. localhost 주소는 텔레그램에서 열 수 없습니다.
+
+[다음 단계]
+YouTube OAuth 연결 및 실제 Shorts 업로드 모듈
+Instagram Graph API 연결
+TikTok Content Posting API 연결
+영상 파일을 외부 저장소에 올려 공개 URL 생성
+
+[3단계: YouTube Shorts 실제 업로드]
+추가 환경변수:
+YOUTUBE_CLIENT_ID=Google Cloud OAuth 클라이언트 ID
+YOUTUBE_CLIENT_SECRET=Google Cloud OAuth 클라이언트 보안 비밀번호
+YOUTUBE_TOKEN_SECRET=32자 이상의 임의 문자열
+
+Google Cloud OAuth 승인된 리디렉션 URI:
+로컬: http://localhost:3000/api/content/youtube/callback
+배포: https://sports-ai-alpha.vercel.app/api/content/youtube/callback
+
+사용 순서:
+1. /content에서 유튜브 계정 연결
+2. 구글 로그인 및 YouTube 권한 승인
+3. 릴스 만들기로 WebM 저장
+4. 저장한 WebM 파일 선택
+5. 비공개/일부 공개/공개 선택
+6. 쇼츠 업로드 클릭
+
+영상은 브라우저에서 Google의 업로드 주소로 직접 전송되므로 큰 파일이 Vercel 서버를 통과하지 않습니다.
+
+[텔레그램 실제 연결]
+1. /content/telegram-setup 에서 연결 상태를 확인합니다.
+2. TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, CONTENT_APPROVAL_SECRET, NEXT_PUBLIC_SITE_URL을 환경변수에 입력합니다.
+3. Vercel 배포 후 테스트 메시지를 보냅니다.
+4. /content에서 발행 승인 요청을 보내면 텔레그램에 승인/취소 버튼이 도착합니다.
+
+[텔레그램 발행 승인]
+- 릴스 생성 후 '릴스와 발행 승인 요청 보내기'를 누르면 WebM 파일, 캡션, 승인/취소 버튼이 전송됩니다.
+- 승인/취소 링크는 24시간 동안 유효합니다.
+- WebM은 텔레그램에서 일반 파일로 전송됩니다. MP4 변환 기능은 다음 단계에서 추가합니다.
+- 환경변수: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, CONTENT_APPROVAL_SECRET, NEXT_PUBLIC_SITE_URL
