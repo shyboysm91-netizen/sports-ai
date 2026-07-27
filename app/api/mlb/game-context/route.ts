@@ -213,30 +213,69 @@ export async function GET(req: NextRequest) {
   const season = date.slice(0, 4) || String(new Date().getFullYear());
   const awayTeamId = Number(q.get("awayTeamId") ?? 0);
   const homeTeamId = Number(q.get("homeTeamId") ?? 0);
-  const awayStarterId = Number(q.get("awayStarterId") ?? 0);
-  const homeStarterId = Number(q.get("homeStarterId") ?? 0);
+  const requestedGamePk = Number(q.get("gamePk") ?? 0);
+  const awayStarterIdParam = Number(q.get("awayStarterId") ?? 0);
+  const homeStarterIdParam = Number(q.get("homeStarterId") ?? 0);
 
   if (!date || (!awayTeamId && !homeTeamId)) {
     return NextResponse.json({ success: false, message: "경기 날짜 또는 팀 ID가 없습니다." }, { status: 400 });
   }
 
   try {
-    const schedule = await fetchJson(
-      `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(date)}&hydrate=venue,officials,probablePitcher,weather`
-    );
-    const games = (schedule?.dates ?? []).flatMap((d: any) => d.games ?? []);
-    const game = games.find((g: any) => {
-      const a = Number(g?.teams?.away?.team?.id ?? 0);
-      const h = Number(g?.teams?.home?.team?.id ?? 0);
-      return (!awayTeamId || a === awayTeamId) && (!homeTeamId || h === homeTeamId);
-    });
+    // 분석 페이지는 한국시간 날짜를 사용하지만 MLB 일정 API는 미국 현지 날짜 기준이라
+    // 하루 차이가 날 수 있다. URL의 gamePk를 최우선으로 사용하고, 없으면 전후 하루까지 찾는다.
+    let game: any = null;
+    let feed: any = null;
 
-    if (!game?.gamePk) {
-      return NextResponse.json({ success: false, message: "해당 날짜의 MLB 경기를 찾지 못했습니다." });
+    if (requestedGamePk) {
+      try {
+        feed = await fetchJson(`https://statsapi.mlb.com/api/v1.1/game/${requestedGamePk}/feed/live`);
+        const feedAwayId = Number(feed?.gameData?.teams?.away?.id ?? 0);
+        const feedHomeId = Number(feed?.gameData?.teams?.home?.id ?? 0);
+        game = {
+          gamePk: requestedGamePk,
+          gameDate: feed?.gameData?.datetime?.dateTime ?? null,
+          venue: feed?.gameData?.venue ?? null,
+          weather: feed?.gameData?.weather ?? null,
+          teams: {
+            away: { team: { id: feedAwayId }, probablePitcher: feed?.gameData?.probablePitchers?.away ?? null },
+            home: { team: { id: feedHomeId }, probablePitcher: feed?.gameData?.probablePitchers?.home ?? null },
+          },
+        };
+      } catch {}
     }
 
-    let feed: any = null;
-    try { feed = await fetchJson(`https://statsapi.mlb.com/api/v1.1/game/${game.gamePk}/feed/live`); } catch {}
+    if (!game?.gamePk) {
+      const base = new Date(`${date}T12:00:00Z`);
+      const candidateDates = [-1, 0, 1].map((offset) => {
+        const d = new Date(base);
+        d.setUTCDate(d.getUTCDate() + offset);
+        return d.toISOString().slice(0, 10);
+      });
+
+      for (const scheduleDate of candidateDates) {
+        try {
+          const schedule = await fetchJson(
+            `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${encodeURIComponent(scheduleDate)}&hydrate=venue,officials,probablePitcher,weather`
+          );
+          const games = (schedule?.dates ?? []).flatMap((d: any) => d.games ?? []);
+          game = games.find((g: any) => {
+            const a = Number(g?.teams?.away?.team?.id ?? 0);
+            const h = Number(g?.teams?.home?.team?.id ?? 0);
+            return (!awayTeamId || a === awayTeamId) && (!homeTeamId || h === homeTeamId);
+          }) ?? null;
+          if (game?.gamePk) break;
+        } catch {}
+      }
+    }
+
+    if (!game?.gamePk) {
+      return NextResponse.json({ success: false, message: "해당 경기의 MLB 공식 경기 정보를 찾지 못했습니다." });
+    }
+
+    if (!feed) {
+      try { feed = await fetchJson(`https://statsapi.mlb.com/api/v1.1/game/${game.gamePk}/feed/live`); } catch {}
+    }
 
     const venueId = Number(game?.venue?.id ?? feed?.gameData?.venue?.id ?? 0);
     const venueName = game?.venue?.name ?? feed?.gameData?.venue?.name ?? "경기장 미정";
@@ -272,6 +311,13 @@ export async function GET(req: NextRequest) {
       return type.includes("home plate") || type.includes("homeplate");
     });
     const umpireName = homePlate?.official?.fullName ?? homePlate?.official?.name ?? null;
+
+    const awayStarterId = awayStarterIdParam || Number(
+      game?.teams?.away?.probablePitcher?.id ?? feed?.gameData?.probablePitchers?.away?.id ?? 0
+    );
+    const homeStarterId = homeStarterIdParam || Number(
+      game?.teams?.home?.probablePitcher?.id ?? feed?.gameData?.probablePitchers?.home?.id ?? 0
+    );
 
     const [awaySplits, homeSplits] = await Promise.all([
       pitcherSplits(awayStarterId, awayTeamId, season, venueId, date),
