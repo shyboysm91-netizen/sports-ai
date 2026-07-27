@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://sports-ai-alpha.vercel.app/google-sitemap.xml
