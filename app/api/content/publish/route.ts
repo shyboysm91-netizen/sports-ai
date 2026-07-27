@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   const status = {
     youtube: Boolean(process.env.YOUTUBE_ACCESS_TOKEN),
     instagram: Boolean(process.env.INSTAGRAM_ACCESS_TOKEN && (process.env.INSTAGRAM_ACCOUNT_ID || process.env.INSTAGRAM_USER_ID)),
-    tiktok: Boolean(process.env.TIKTOK_ACCESS_TOKEN && process.env.TIKTOK_OPEN_ID),
+    tiktok: Boolean(process.env.TIKTOK_ACCESS_TOKEN),
   };
   const unavailable = requested.filter((key: string) => !status[key as keyof typeof status]);
   if (unavailable.length) {

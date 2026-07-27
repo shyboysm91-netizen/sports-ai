@@ -95,7 +95,7 @@ export async function runAutomaticContent(siteUrl: string): Promise<AutoResult[]
         const buffer = await fs.readFile(output); const approvalId = randomUUID();
         const title = `${game.away || "원정팀"} vs ${game.home || "홈팀"}`;
         const caption = `⚾ ${league} ${title}\n\n${narration}\n\n#야구 #${league} #야구분석 #스포츠AI #경기예측`;
-        const platforms = ["youtube", "instagram"];
+        const platforms = ["youtube", "instagram", "tiktok"];
         const payload = encode({ approvalId, league, date, away: game.away, home: game.home, title, platforms, exp: Date.now() + 24 * 60 * 60 * 1000 });
         const token = `${payload}.${sign(payload, secret)}`;
         const approveUrl = `${siteUrl}/api/content/telegram/action?action=approve&token=${encodeURIComponent(token)}`;

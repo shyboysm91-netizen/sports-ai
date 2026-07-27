@@ -20,6 +20,11 @@ export type ApprovalRecord = {
   instagramMediaId?: string;
   instagramUrl?: string;
   instagramError?: string;
+  tiktokPublishId?: string;
+  tiktokPostId?: string;
+  tiktokUrl?: string;
+  tiktokStatus?: string;
+  tiktokError?: string;
   error?: string;
   createdAt: string;
   updatedAt: string;

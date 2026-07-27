@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getValidToken } from "@/app/lib/youtube-oauth";
 import { publishInstagramReel } from "@/app/lib/instagram-publisher";
+import { publishTikTokVideo } from "@/app/lib/tiktok-publisher";
 import { readApproval, updateApproval } from "@/app/lib/content-automation-store";
 
 export const dynamic = "force-dynamic";
@@ -91,7 +92,8 @@ function completedForPlatforms(approval: Awaited<ReturnType<typeof readApproval>
   const platforms = approval.platforms || [];
   const youtubeDone = !platforms.includes("youtube") || Boolean(approval.youtubeUrl);
   const instagramDone = !platforms.includes("instagram") || Boolean(approval.instagramMediaId);
-  return youtubeDone && instagramDone;
+  const tiktokDone = !platforms.includes("tiktok") || Boolean(approval.tiktokPublishId);
+  return youtubeDone && instagramDone && tiktokDone;
 }
 
 export async function GET(request: NextRequest) {
@@ -122,7 +124,7 @@ export async function GET(request: NextRequest) {
   if (action !== "approve") return page("처리 실패", "지원하지 않는 작업입니다.", false);
 
   if (completedForPlatforms(approval)) {
-    const links = [approval.youtubeUrl, approval.instagramUrl].filter(Boolean).map((value) => escapeHtml(String(value))).join("<br>");
+    const links = [approval.youtubeUrl, approval.instagramUrl, approval.tiktokUrl].filter(Boolean).map((value) => escapeHtml(String(value))).join("<br>");
     return page("이미 업로드 완료", `${escapeHtml(approval.title)} 콘텐츠는 이미 업로드되었습니다.<br><br>${links}`, true);
   }
   if (approval.status === "uploading") return page("업로드 진행 중", "이미 업로드가 시작되었습니다. 잠시 후 텔레그램 완료 메시지를 확인하세요.", true);
@@ -132,10 +134,11 @@ export async function GET(request: NextRequest) {
   const platforms = approval.platforms || [];
   const wantsYoutube = platforms.includes("youtube");
   const wantsInstagram = platforms.includes("instagram");
-  if (!wantsYoutube && !wantsInstagram) return page("승인 완료", "자동 업로드가 가능한 플랫폼이 선택되지 않았습니다.", true);
+  const wantsTikTok = platforms.includes("tiktok");
+  if (!wantsYoutube && !wantsInstagram && !wantsTikTok) return page("승인 완료", "자동 업로드가 가능한 플랫폼이 선택되지 않았습니다.", true);
 
-  await updateApproval(payload.approvalId, { status: "uploading", error: undefined, instagramError: undefined });
-  await notify(`⏳ 자동 업로드 시작\n${approval.league} ${approval.title}\n플랫폼: ${[wantsYoutube && "YouTube", wantsInstagram && "Instagram"].filter(Boolean).join(", ")}`);
+  await updateApproval(payload.approvalId, { status: "uploading", error: undefined, instagramError: undefined, tiktokError: undefined });
+  await notify(`⏳ 자동 업로드 시작\n${approval.league} ${approval.title}\n플랫폼: ${[wantsYoutube && "YouTube", wantsInstagram && "Instagram", wantsTikTok && "TikTok"].filter(Boolean).join(", ")}`);
 
   const successes: string[] = [];
   const failures: string[] = [];
@@ -173,6 +176,33 @@ export async function GET(request: NextRequest) {
     }
   } else if (wantsInstagram && approval.instagramMediaId) {
     successes.push(`Instagram: ${approval.instagramUrl || "게시 완료"}`);
+  }
+
+  if (wantsTikTok && !approval.tiktokPublishId) {
+    try {
+      const mimeType = (approval.mimeType || "").toLowerCase();
+      const fileName = (approval.fileName || "").toLowerCase();
+      if (!mimeType.includes("mp4") && !fileName.endsWith(".mp4")) {
+        throw new Error("TikTok 자동 게시에는 MP4 영상이 필요합니다. 최신 버전에서 릴스를 새로 생성해 주세요.");
+      }
+      video = video || await downloadTelegramFile(approval.telegramFileId);
+      const caption = [approval.description, approval.hashtags].filter(Boolean).join("\n\n");
+      const uploaded = await publishTikTokVideo({ video, caption });
+      await updateApproval(payload.approvalId, {
+        tiktokPublishId: uploaded.publishId,
+        tiktokPostId: uploaded.postId || undefined,
+        tiktokUrl: uploaded.url || undefined,
+        tiktokStatus: uploaded.status,
+        tiktokError: undefined,
+      });
+      successes.push(`TikTok: ${uploaded.url || `게시 요청 완료 (${uploaded.status}, ${uploaded.privacyLevel})`}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "업로드 실패";
+      await updateApproval(payload.approvalId, { tiktokError: message });
+      failures.push(`TikTok: ${message}`);
+    }
+  } else if (wantsTikTok && approval.tiktokPublishId) {
+    successes.push(`TikTok: ${approval.tiktokUrl || `게시 요청 완료 (${approval.tiktokStatus || "처리 완료"})`}`);
   }
 
   const finalStatus = failures.length ? "failed" : "published";

@@ -1,0 +1,17 @@
+TikTok 자동 발행 추가
+
+추가 파일
+- app/lib/tiktok-publisher.ts
+- TIKTOK_AUTO_SETUP.md
+
+수정 파일
+- app/api/content/telegram/action/route.ts
+- app/lib/content-automation-store.ts
+- app/lib/auto-content.ts
+- app/api/content/publish/route.ts
+
+기존 야구 분석 관련 파일은 수정하지 않음
+- app/game/*
+- app/mlb-game/*
+- app/npb-game/*
+- KBO/MLB/NPB 분석 API 및 계산 로직
