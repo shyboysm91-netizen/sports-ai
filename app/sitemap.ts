@@ -15,6 +15,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1,
     },
     {
+      url: `${BASE_URL}/analysis`,
+      lastModified: now,
+      changeFrequency: "hourly",
+      priority: 0.95,
+    },
+    {
       url: `${BASE_URL}/game`,
       lastModified: now,
       changeFrequency: "daily",
