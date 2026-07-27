@@ -77,6 +77,10 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <head>
+        <meta
+          name="naver-site-verification"
+          content="c2a0a0d6a7e04ab4613aa0eec44375d3aba7ae1d"
+        />
         <script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4211269647736996"
