@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   if (!token) return NextResponse.json({ success:false, message:"유튜브 계정을 먼저 연결하세요." }, { status:401 });
   const body = await request.json().catch(()=>({}));
   const title = String(body.title||"").trim().slice(0,100); const description = String(body.description||"").slice(0,5000);
-  const privacyStatus = ["private","unlisted","public"].includes(body.privacyStatus) ? body.privacyStatus : "private";
+  const privacyStatus = ["private","unlisted","public"].includes(body.privacyStatus) ? body.privacyStatus : "public";
   const mimeType = String(body.mimeType||"video/webm"); const size = Number(body.size||0);
   if (!title || !size) return NextResponse.json({ success:false, message:"영상 제목과 파일이 필요합니다." }, { status:400 });
   const init = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", { method:"POST", headers:{ Authorization:`Bearer ${token.access_token}`, "Content-Type":"application/json; charset=UTF-8", "X-Upload-Content-Length":String(size), "X-Upload-Content-Type":mimeType }, body:JSON.stringify({ snippet:{ title, description, categoryId:"17" }, status:{ privacyStatus, selfDeclaredMadeForKids:false } }) });

@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     const privacyStatus = ["private", "unlisted", "public"].includes(String(body.privacyStatus))
       ? body.privacyStatus as "private" | "unlisted" | "public"
-      : "private";
+      : "public";
     const now = new Date().toISOString();
 
     // 먼저 영상을 텔레그램에 올립니다. 이때는 승인 버튼을 붙이지 않습니다.

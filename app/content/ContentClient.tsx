@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { loadReelAnalysis } from "@/app/lib/content-analysis";
 
 type League = "KBO" | "MLB" | "NPB";
 type Game = {
@@ -19,13 +18,6 @@ type Game = {
   homeStarterName?: string;
   awayPitcher?: string;
   homePitcher?: string;
-  stadium?: string;
-  awayStarterCode?: string;
-  homeStarterCode?: string;
-  awayTeamId?: number;
-  homeTeamId?: number;
-  awayStarterId?: number;
-  homeStarterId?: number;
 };
 
 type ContentData = {
@@ -103,7 +95,7 @@ export default function ContentPage() {
   const [connection, setConnection] = useState({ telegram: false, instagram: false, youtube: false, tiktok: false });
   const [youtubeConfigured, setYoutubeConfigured] = useState(false);
   const [youtubeFile, setYoutubeFile] = useState<File | null>(null);
-  const [youtubePrivacy, setYoutubePrivacy] = useState("private");
+  const [youtubePrivacy, setYoutubePrivacy] = useState("public");
   const [youtubeUploading, setYoutubeUploading] = useState(false);
   const [youtubeProgress, setYoutubeProgress] = useState(0);
   const [reelBlob, setReelBlob] = useState<Blob | null>(null);
@@ -154,21 +146,12 @@ export default function ContentPage() {
     } finally { setLoading(false); }
   }
 
-  async function selectGame(game: Game) {
-    const selectedDate = game.date || date;
-    const base = {
-      league, date: selectedDate, away: game.away || "원정팀", home: game.home || "홈팀",
+  function selectGame(game: Game) {
+    setData((prev) => ({
+      ...prev, league, date: game.date || date, away: game.away || "원정팀", home: game.home || "홈팀",
       awayStarter: pickStarter(game, "away"), homeStarter: pickStarter(game, "home"),
-    };
-    setData((prev) => ({ ...prev, ...base }));
-    setMessage(`${game.away} vs ${game.home} 실제 분석 데이터를 불러오는 중입니다.`);
-    try {
-      const analysis = await loadReelAnalysis("", league, game, selectedDate);
-      setData((prev) => ({ ...prev, ...base, ...analysis }));
-      setMessage(`${game.away} vs ${game.home} 분석 데이터가 릴스에 자동 입력되었습니다.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? `경기는 선택됐지만 분석 자동 입력 실패: ${error.message}` : "분석 자동 입력에 실패했습니다.");
-    }
+    }));
+    setMessage(`${game.away} vs ${game.home} 경기를 선택했습니다.`);
   }
 
   const headline = useMemo(() => hook(data), [data]);

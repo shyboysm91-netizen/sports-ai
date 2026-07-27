@@ -8,7 +8,6 @@ import sharp from "sharp";
 import ffmpegPath from "ffmpeg-static";
 import { readSportsCache, writeSportsCache } from "@/app/lib/sports-db-cache";
 import { saveApproval } from "@/app/lib/content-automation-store";
-import { loadReelAnalysis } from "@/app/lib/content-analysis";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,20 +41,17 @@ async function synthesize(text: string, out: string) {
   const r = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: { text }, voice: { languageCode: "ko-KR", ssmlGender: "NEUTRAL" }, audioConfig: { audioEncoding: "MP3", speakingRate: 1.08 } }) });
   const j = await r.json(); if (!r.ok || !j?.audioContent) return false; await fs.writeFile(out, Buffer.from(j.audioContent, "base64")); return true;
 }
-async function renderVideo(siteUrl: string, game: Game, league: "KBO" | "NPB" | "MLB", date: string) {
+async function renderVideo(game: Game, league: string, date: string) {
   if (!ffmpegPath) throw new Error("ffmpeg 실행 파일을 찾지 못했습니다.");
   const away = game.away || "원정팀", home = game.home || "홈팀";
   const a = starter(game, "away"), h = starter(game, "home");
-  const analysis = await loadReelAnalysis(siteUrl, league, game, date);
-  const winner = Number(analysis.homeWinRate) >= 50 ? home : away;
-  const winnerRate = Number(analysis.homeWinRate) >= 50 ? Number(analysis.homeWinRate) : 100 - Number(analysis.homeWinRate);
   const slides = [
     ["오늘의 핵심 경기", [`${away} vs ${home}`, `${league} ${date}`]],
-    ["선발투수 비교", [`${away}: ${a} · ERA ${analysis.awayEra}`, `${home}: ${h} · ERA ${analysis.homeEra}`]],
-    ["최근 10경기", [`${away}: ${analysis.awayRecent}`, `${home}: ${analysis.homeRecent}`]],
-    ["최근 맞대결", [`${away}: ${analysis.awayH2h}`, `${home}: ${analysis.homeH2h}`]],
-    ["AI 최종 예측", [`${winner} 승리 확률 ${winnerRate}%`, `예상 스코어 ${away} ${analysis.awayScore} : ${analysis.homeScore} ${home}`]],
-    ["핵심 분석", [analysis.summary]],
+    ["선발투수 비교", [`${away}: ${a}`, `${home}: ${h}`]],
+    ["체크 포인트", ["최근 흐름과 선발 매치업", "불펜 소모와 홈·원정 성적"]],
+    ["AI 분석", ["경기 데이터가 갱신되면", "최종 예측도 자동 반영됩니다"]],
+    ["승부 포인트", ["초반 선발 안정감", "후반 불펜 운영이 핵심"]],
+    ["발행 전 확인", ["텔레그램에서 영상을 확인하고", "발행 또는 취소를 선택하세요"]],
   ];
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sports-ai-auto-"));
   const concat: string[] = [];
@@ -66,7 +62,7 @@ async function renderVideo(siteUrl: string, game: Game, league: "KBO" | "NPB" | 
   }
   concat.push(`file '${path.join(dir, `slide-${slides.length - 1}.png`).replaceAll("'", "'\\''")}'`);
   const list = path.join(dir, "slides.txt"); await fs.writeFile(list, concat.join("\n"));
-  const narration = `${league} ${away} 대 ${home}. 원정 선발 ${a}, 평균자책점 ${analysis.awayEra}. 홈 선발 ${h}, 평균자책점 ${analysis.homeEra}. 최근 10경기는 ${away} ${analysis.awayRecent}, ${home} ${analysis.homeRecent}. AI는 ${winner} 승리 확률을 ${winnerRate}퍼센트로 평가했고 예상 스코어는 ${analysis.awayScore} 대 ${analysis.homeScore}입니다. ${analysis.summary}`;
+  const narration = `${league} ${away} 대 ${home}. 원정 선발 ${a}, 홈 선발 ${h}. 최근 흐름과 불펜 소모, 홈 원정 성적을 함께 확인했습니다. 텔레그램에서 영상을 확인하고 발행 여부를 선택해 주세요.`;
   const audio = path.join(dir, "voice.mp3"); const hasAudio = await synthesize(narration, audio);
   const output = path.join(dir, "sports-ai-auto.mp4");
   const args = ["-y", "-f", "concat", "-safe", "0", "-i", list];
@@ -94,7 +90,7 @@ export async function runAutomaticContent(siteUrl: string): Promise<AutoResult[]
       const gameKey = String(game.gamePk || game.id || `${game.away}-${game.home}-${game.time || ""}`);
       const dedup = `auto-content-sent:${date}:${league}:${gameKey}`;
       if (await readSportsCache(dedup)) continue;
-      const { dir, output, narration } = await renderVideo(siteUrl, game, league as "KBO" | "NPB" | "MLB", date);
+      const { dir, output, narration } = await renderVideo(game, league, date);
       try {
         const buffer = await fs.readFile(output); const approvalId = randomUUID();
         const title = `${game.away || "원정팀"} vs ${game.home || "홈팀"}`;
@@ -109,7 +105,7 @@ export async function runAutomaticContent(siteUrl: string): Promise<AutoResult[]
         if (!vr.ok || !vj?.ok) throw new Error(vj?.description || "자동 릴스 텔레그램 전송 실패");
         const fileId = vj?.result?.document?.file_id; if (!fileId) throw new Error("Telegram file_id 없음");
         const now = new Date().toISOString();
-        await saveApproval({ approvalId, league, date, away: game.away || "원정팀", home: game.home || "홈팀", title, description: caption, hashtags: caption.split(/\s+/).filter((x) => x.startsWith("#")).join(" "), platforms, privacyStatus: "private", status: "waiting", telegramFileId: fileId, fileName: "sports-ai-auto.mp4", mimeType: "video/mp4", createdAt: now, updatedAt: now });
+        await saveApproval({ approvalId, league, date, away: game.away || "원정팀", home: game.home || "홈팀", title, description: caption, hashtags: caption.split(/\s+/).filter((x) => x.startsWith("#")).join(" "), platforms, privacyStatus: "public", status: "waiting", telegramFileId: fileId, fileName: "sports-ai-auto.mp4", mimeType: "video/mp4", createdAt: now, updatedAt: now });
         await telegramJson(botToken, "sendMessage", { chat_id: chatId, text: `✅ 자동 릴스 준비 완료\n${league} ${title}`, reply_markup: { inline_keyboard: [[{ text: "✅ 발행 승인", url: approveUrl }, { text: "❌ 취소", url: cancelUrl }], [{ text: "✏️ 내용 수정", url: `${siteUrl}/content` }]] } });
         await writeSportsCache(dedup, { approvalId, sentAt: now }, 60 * 60 * 24 * 14);
         results.push({ league, game: title, approvalId });
