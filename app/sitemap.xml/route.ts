@@ -5,6 +5,7 @@ export const revalidate = 0;
 export const runtime = "nodejs";
 
 const BASE_URL = "https://sports-ai-alpha.vercel.app";
+const FETCH_TIMEOUT_MS = 1_800;
 
 type League = "kbo" | "mlb" | "npb";
 type Game = {
@@ -44,25 +45,28 @@ function xmlEscape(value: string) {
     .replaceAll("'", "&apos;");
 }
 
-async function loadGames(origin: string, league: League, date: string): Promise<Game[]> {
+async function loadGames(league: League, date: string): Promise<Game[]> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${origin}/api/${league}?date=${encodeURIComponent(date)}`, {
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "Sports-AI-Sitemap/1.0",
+    const response = await fetch(
+      `${BASE_URL}/api/${league}?date=${encodeURIComponent(date)}`,
+      {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Sports-AI-Sitemap/2.0",
+        },
+        signal: controller.signal,
       },
-      signal: controller.signal,
-    });
+    );
 
     if (!response.ok) return [];
     const data = (await response.json()) as { games?: unknown };
     return Array.isArray(data.games) ? (data.games as Game[]) : [];
-  } catch (error) {
-    console.error(`[sitemap.xml] ${league} ${date} load failed`, error);
+  } catch {
+    // 경기 API가 느리거나 일시적으로 실패해도 사이트맵 자체는 항상 200으로 반환합니다.
     return [];
   } finally {
     clearTimeout(timer);
@@ -92,25 +96,25 @@ function toXml(items: SitemapItem[]) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>`;
 }
 
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const origin = requestUrl.origin;
+export async function GET() {
   const now = new Date().toISOString();
+  const today = koreaDate(0);
   const leagues: League[] = ["kbo", "mlb", "npb"];
   const dates = [-1, 0, 1].map(koreaDate);
 
   const groups = await Promise.all(
     leagues.flatMap((league) =>
       dates.map(async (date) => {
-        const games = await loadGames(origin, league, date);
+        const games = await loadGames(league, date);
         return games
           .filter((game) => Boolean(game.away && game.home))
           .map<SitemapItem>((game) => ({
-            url: `${BASE_URL}/analysis/${league}/${game.date || date}/${slug(game.away!)}` +
+            url:
+              `${BASE_URL}/analysis/${league}/${game.date || date}/${slug(game.away!)}` +
               `-vs-${slug(game.home!)}`,
             lastModified: now,
             changeFrequency: "daily",
-            priority: date === koreaDate(0) ? 0.9 : 0.8,
+            priority: date === today ? 0.9 : 0.8,
           }));
       }),
     ),
@@ -125,7 +129,8 @@ export async function GET(request: Request) {
     status: 200,
     headers: {
       "Content-Type": "application/xml; charset=utf-8",
-      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
+      "X-Robots-Tag": "noindex, follow",
     },
   });
 }

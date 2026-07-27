@@ -131,19 +131,67 @@ export default async function AnalysisGamePage({
   const canonical = cleanCanonical(league, route.date, route.matchup);
   const structuredData = {
     "@context": "https://schema.org",
-    "@type": "SportsEvent",
-    name: `${away} vs ${home}`,
-    startDate: date,
-    url: canonical,
-    sport: "Baseball",
-    eventStatus: "https://schema.org/EventScheduled",
-    homeTeam: { "@type": "SportsTeam", name: home },
-    awayTeam: { "@type": "SportsTeam", name: away },
-    organizer: {
-      "@type": "Organization",
-      name: "Sports AI",
-      url: BASE_URL,
-    },
+    "@graph": [
+      {
+        "@type": "SportsEvent",
+        "@id": `${canonical}#event`,
+        name: `${away} vs ${home}`,
+        startDate: date,
+        url: canonical,
+        sport: "Baseball",
+        eventStatus: "https://schema.org/EventScheduled",
+        homeTeam: { "@type": "SportsTeam", name: home },
+        awayTeam: { "@type": "SportsTeam", name: away },
+        organizer: {
+          "@type": "Organization",
+          name: "Sports AI",
+          url: BASE_URL,
+        },
+      },
+      {
+        "@type": "WebPage",
+        "@id": `${canonical}#webpage`,
+        url: canonical,
+        name: `${away} vs ${home} ${leagueLabel(league)} AI 분석 및 승부예측`,
+        description: `${date} ${away} vs ${home} 경기의 선발투수, 최근 10경기, 맞대결, 팀 전력과 AI 승리 확률 및 예상 결과를 제공합니다.`,
+        inLanguage: "ko-KR",
+        isPartOf: {
+          "@type": "WebSite",
+          "@id": `${BASE_URL}/#website`,
+          name: "Sports AI",
+          url: BASE_URL,
+        },
+        about: { "@id": `${canonical}#event` },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Sports AI",
+            item: BASE_URL,
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: `${leagueLabel(league)} 경기 분석`,
+            item:
+              league === "mlb"
+                ? `${BASE_URL}/mlb-game`
+                : league === "npb"
+                  ? `${BASE_URL}/npb-game`
+                  : `${BASE_URL}/game`,
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: `${away} vs ${home}`,
+            item: canonical,
+          },
+        ],
+      },
+    ],
   };
 
   return (
