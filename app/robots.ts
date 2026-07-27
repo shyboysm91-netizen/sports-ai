@@ -6,6 +6,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
     },
-    sitemap: "https://sports-ai-alpha.vercel.app/sitemap.xml",
+    sitemap: "https://sports-ai-alpha.vercel.app/sitemap-main.xml",
   };
 }
