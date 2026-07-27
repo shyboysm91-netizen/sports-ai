@@ -156,7 +156,19 @@ async function npb(siteUrl: string, game: ContentGame, date: string): Promise<Re
 async function mlb(siteUrl: string, game: ContentGame, date: string): Promise<ReelAnalysis> {
   const awayId = n(game.awayTeamId), homeId = n(game.homeTeamId);
   if (!awayId || !homeId) throw new Error("MLB 팀 ID가 없습니다.");
-  const query = new URLSearchParams({ date, awayTeamId: String(awayId), homeTeamId: String(homeId), awayStarterId: String(n(game.awayStarterId)), homeStarterId: String(n(game.homeStarterId)) });
+
+  // MLB 일정 API는 선발 ID를 awayStarterCode/homeStarterCode로 내려준다.
+  // 기존 릴스 분석은 awayStarterId/homeStarterId만 읽어서 항상 0을 보내고 있었고,
+  // 그 결과 선발 시즌 기록이 null이 되어 ERA가 '기록 없음'으로 표시됐다.
+  const awayStarterId = n(game.awayStarterId || game.awayStarterCode);
+  const homeStarterId = n(game.homeStarterId || game.homeStarterCode);
+  const query = new URLSearchParams({
+    date,
+    awayTeamId: String(awayId),
+    homeTeamId: String(homeId),
+    awayStarterId: String(awayStarterId),
+    homeStarterId: String(homeStarterId),
+  });
   const data = await json(`${siteUrl}/api/mlb/analysis?${query}`);
   const aRecent = Array.isArray(data?.awayRecent) ? data.awayRecent : [];
   const hRecent = Array.isArray(data?.homeRecent) ? data.homeRecent : [];
@@ -168,7 +180,15 @@ async function mlb(siteUrl: string, game: ContentGame, date: string): Promise<Re
   const homeProb = Math.max(28, Math.min(72, Math.round(53 + (homePct - awayPct) * 55 + recentEdge * 1.8)));
   const [awayScore, homeScore] = projectedScores(averageRuns(ar, 4.2), averageRuns(hr, 4.2), homeProb);
   const h2h = data?.headToHead;
-  const awayEra = s(data?.awayPitcher?.season?.era), homeEra = s(data?.homePitcher?.season?.era);
+  const readEra = (pitcher: any) => s(
+    pitcher?.season?.era
+      ?? pitcher?.seasonEra
+      ?? pitcher?.stats?.era
+      ?? pitcher?.era,
+    "기록 없음",
+  );
+  const awayEra = readEra(data?.awayPitcher);
+  const homeEra = readEra(data?.homePitcher);
   return {
     awayEra, homeEra, awayRecent: formText(ar), homeRecent: formText(hr),
     awayH2h: h2h ? `${n(h2h.awayWins)}승` : "자료 없음", homeH2h: h2h ? `${n(h2h.homeWins)}승` : "자료 없음",
