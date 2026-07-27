@@ -205,27 +205,6 @@ export default async function AnalysisGamePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
 
-      <section
-        aria-label="경기 분석 안내"
-        style={{ maxWidth: 1120, margin: "0 auto", padding: "20px 16px 4px" }}
-      >
-        <nav aria-label="현재 위치" style={{ fontSize: 14, color: "#666" }}>
-          <Link href="/" style={{ color: "inherit" }}>Sports AI</Link>
-          {" / "}
-          <Link href="/analysis" style={{ color: "inherit" }}>오늘의 경기 분석</Link>
-          {" / "}
-          <Link href={leaguePage} style={{ color: "inherit" }}>{leagueLabel(league)}</Link>
-        </nav>
-        <h1 style={{ margin: "12px 0 8px", fontSize: "clamp(24px, 4vw, 36px)" }}>
-          {away} vs {home} {leagueLabel(league)} AI 경기 분석
-        </h1>
-        <p style={{ margin: 0, color: "#555", lineHeight: 1.7 }}>
-          {date} 열리는 {away}와 {home} 경기의 선발투수, 최근 전적, 맞대결,
-          팀 전력과 AI 승부예측을 확인하세요. 분석 결과는 참고용이며 경기 전
-          최신 정보가 반영될 수 있습니다.
-        </p>
-      </section>
-
       {league === "mlb" ? (
         <MlbGameClient />
       ) : league === "npb" ? (
