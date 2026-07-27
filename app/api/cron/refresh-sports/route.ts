@@ -57,6 +57,7 @@ export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
   const dates = [kstDate(-2), kstDate(-1), kstDate(0), kstDate(1)];
   const results: Array<{ path: string; ok: boolean; status: number }> = [];
+  const indexNowUrls = new Set<string>([`${origin}/analysis`]);
 
   for (const date of dates) {
     const schedules = {
@@ -80,6 +81,7 @@ export async function GET(request: Request) {
       const away = game.away || "";
       const home = game.home || "";
       if (!away || !home) continue;
+      indexNowUrls.add(`${origin}/analysis/kbo/${encodeURIComponent(date)}/${encodeURIComponent(away)}-vs-${encodeURIComponent(home)}`);
       results.push(await warm(origin, query("/api/betman", { date, away, home }), 1800));
     }
 
@@ -90,6 +92,7 @@ export async function GET(request: Request) {
       const awayStarter = game.awayStarter || "";
       const homeStarter = game.homeStarter || "";
       if (!away || !home) continue;
+      indexNowUrls.add(`${origin}/analysis/npb/${encodeURIComponent(date)}/${encodeURIComponent(away)}-vs-${encodeURIComponent(home)}`);
 
       results.push(await warm(origin, query("/api/npb/analysis", { away, home, date, awayStarter, homeStarter, stadium }), 900));
       if (stadium) results.push(await warm(origin, query("/api/npb/weather", { stadium, date }), 3600));
@@ -100,6 +103,7 @@ export async function GET(request: Request) {
       const away = game.awayApi || game.away || "";
       const home = game.homeApi || game.home || "";
       if (!away || !home) continue;
+      indexNowUrls.add(`${origin}/analysis/mlb/${encodeURIComponent(date)}/${encodeURIComponent(away)}-vs-${encodeURIComponent(home)}`);
       results.push(await warm(origin, query("/api/mlb/market", {
         league: "MLB",
         date,
@@ -120,6 +124,26 @@ export async function GET(request: Request) {
 
   await deleteExpiredSportsCache();
 
+  let indexNow = null;
+  if (process.env.INDEXNOW_KEY && indexNowUrls.size > 0) {
+    try {
+      const response = await fetch(`${origin}/api/indexnow`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(process.env.INDEXNOW_SECRET
+            ? { "x-indexnow-secret": process.env.INDEXNOW_SECRET }
+            : {}),
+        },
+        body: JSON.stringify({ urls: [...indexNowUrls] }),
+        cache: "no-store",
+      });
+      indexNow = await response.json().catch(() => ({ success: response.ok, status: response.status }));
+    } catch (error) {
+      indexNow = { success: false, message: error instanceof Error ? error.message : "IndexNow 제출 실패" };
+    }
+  }
+
   return NextResponse.json({
     success: true,
     refreshedAt: new Date().toISOString(),
@@ -127,5 +151,6 @@ export async function GET(request: Request) {
     successCount: results.filter((item) => item.ok).length,
     failed: results.filter((item) => !item.ok),
     resultUpdate,
+    indexNow,
   });
 }

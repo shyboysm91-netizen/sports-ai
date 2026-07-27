@@ -87,11 +87,13 @@ export async function generateMetadata({
       siteName: "Sports AI",
       type: "article",
       locale: "ko_KR",
+      images: [{ url: `${canonical}/opengraph-image`, width: 1200, height: 630, alt: `${away} vs ${home} 경기 분석` }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
+      images: [`${canonical}/opengraph-image`],
     },
   };
 }
@@ -163,6 +165,36 @@ export default async function AnalysisGamePage({
           url: BASE_URL,
         },
         about: { "@id": `${canonical}#event` },
+      },
+      {
+        "@type": "FAQPage",
+        "@id": `${canonical}#faq`,
+        mainEntity: [
+          {
+            "@type": "Question",
+            name: `${away} vs ${home} 경기 분석에서 무엇을 확인할 수 있나요?`,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "선발투수 비교, 최근 경기 흐름, 맞대결, 팀 전력, 예상 스코어와 AI 승리 확률을 확인할 수 있습니다.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: `${away} vs ${home} 예상 결과는 어떻게 계산하나요?`,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "Sports AI는 공개된 경기 기록과 선발투수, 타격, 불펜, 최근 흐름 등의 데이터를 종합해 예상 결과를 제공합니다.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "AI 승부예측은 확정 결과인가요?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "아닙니다. AI 분석은 참고용 예상이며 실제 경기 결과를 보장하지 않습니다.",
+            },
+          },
+        ],
       },
       {
         "@type": "BreadcrumbList",

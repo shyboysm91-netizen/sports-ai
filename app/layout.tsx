@@ -45,6 +45,7 @@ export const metadata: Metadata = {
     title: "Sports AI | KBO · MLB · NPB AI 야구 분석",
     description:
       "KBO, MLB, NPB 경기 분석, 선발투수 비교, 최근 기록, 맞대결과 AI 승부예측 정보를 확인하세요.",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Sports AI 야구 분석" }],
   },
 
   twitter: {
@@ -52,6 +53,7 @@ export const metadata: Metadata = {
     title: "Sports AI | KBO · MLB · NPB AI 야구 분석",
     description:
       "KBO, MLB, NPB 경기 분석과 AI 승부예측 정보를 한눈에 확인하세요.",
+    images: ["/opengraph-image"],
   },
 
   robots: {
@@ -77,6 +79,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <head>
+        <link rel="alternate" type="application/rss+xml" title="Sports AI 경기 분석 RSS" href="/rss.xml" />
         <meta
           name="naver-site-verification"
           content="c2a0a0d6a7e04ab4613aa0eec44375d3aba7ae1d"
