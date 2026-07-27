@@ -8,6 +8,7 @@ type League = "KBO" | "MLB" | "NPB";
 type Game = {
   league?: League;
   gamePk?: number;
+  id?: string | number;
   date?: string;
   time?: string;
   away?: string;
@@ -18,6 +19,12 @@ type Game = {
   homeStarterName?: string;
   awayPitcher?: string;
   homePitcher?: string;
+  awayStarterCode?: string;
+  homeStarterCode?: string;
+  awayTeamId?: number;
+  homeTeamId?: number;
+  awayStarterId?: number;
+  homeStarterId?: number;
 };
 
 type ContentData = {
@@ -146,12 +153,37 @@ export default function ContentPage() {
     } finally { setLoading(false); }
   }
 
-  function selectGame(game: Game) {
+  async function selectGame(game: Game) {
+    const selectedDate = game.date || date;
+    const selectedAway = game.away || "원정팀";
+    const selectedHome = game.home || "홈팀";
     setData((prev) => ({
-      ...prev, league, date: game.date || date, away: game.away || "원정팀", home: game.home || "홈팀",
+      ...prev, league, date: selectedDate, away: selectedAway, home: selectedHome,
       awayStarter: pickStarter(game, "away"), homeStarter: pickStarter(game, "home"),
+      awayEra: "불러오는 중", homeEra: "불러오는 중",
     }));
-    setMessage(`${game.away} vs ${game.home} 경기를 선택했습니다.`);
+    setMessage(`${selectedAway} vs ${selectedHome} 실제 분석 데이터를 불러오는 중입니다.`);
+
+    try {
+      const response = await fetch("/api/content/analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ league, date: selectedDate, game }),
+        cache: "no-store",
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json?.success || !json?.analysis) {
+        throw new Error(json?.message || "실제 분석 데이터를 불러오지 못했습니다.");
+      }
+      setData((prev) => ({ ...prev, ...json.analysis,
+        league, date: selectedDate, away: selectedAway, home: selectedHome,
+        awayStarter: pickStarter(game, "away"), homeStarter: pickStarter(game, "home"),
+      }));
+      setMessage(`${selectedAway} vs ${selectedHome} 선발 ERA와 실제 분석 데이터를 불러왔습니다.`);
+    } catch (error) {
+      setData((prev) => ({ ...prev, awayEra: "기록 없음", homeEra: "기록 없음" }));
+      setMessage(error instanceof Error ? error.message : "실제 분석 데이터를 불러오지 못했습니다.");
+    }
   }
 
   const headline = useMemo(() => hook(data), [data]);
@@ -527,7 +559,7 @@ function buildNarration(d: ContentData, headline: string) {
   const predicted = Number(d.homeWinRate) >= 50 ? d.home : d.away;
   return [
     headline,
-    `선발 투수는 ${d.away} ${d.awayStarter}, ${d.home} ${d.homeStarter}입니다.`,
+    `선발 투수는 ${d.away} ${d.awayStarter}, 평균자책점 ${d.awayEra}, ${d.home} ${d.homeStarter}, 평균자책점 ${d.homeEra}입니다.`,
     `최근 열 경기 흐름은 ${d.away} ${d.awayRecent}, ${d.home} ${d.homeRecent}입니다.`,
     `맞대결 기록은 ${d.away} ${d.awayH2h}, ${d.home} ${d.homeH2h}입니다.`,
     `Sports AI는 ${predicted} 우세, 예상 점수 ${d.awayScore} 대 ${d.homeScore}로 분석했습니다.`,
@@ -563,6 +595,6 @@ function drawCard(ctx: CanvasRenderingContext2D, index: number, d: ContentData, 
   ctx.fillStyle="#6f7c90";ctx.font="900 24px Arial";ctx.fillText("SPORTS AI",70,1280);
 }
 function wrap(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,max:number,line:number){String(text||"").split("\n").forEach((part)=>{let lineText="";for(const ch of part){const test=lineText+ch;if(ctx.measureText(test).width>max&&lineText){ctx.fillText(lineText,x,y);y+=line;lineText=ch}else lineText=test}if(lineText){ctx.fillText(lineText,x,y);y+=line}})}
-function panel(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,tag:string,team:string,name:string,era:string){ctx.fillStyle="#151d29";round(ctx,x,y,w,h,28);ctx.fill();ctx.fillStyle="#8290a5";ctx.font="700 24px Arial";ctx.fillText(tag,x+35,y+55);ctx.fillStyle="#fff";ctx.font="900 44px Arial";wrap(ctx,team,x+35,y+125,w-70,52);ctx.fillStyle="#9aa8bb";ctx.font="700 28px Arial";wrap(ctx,name,x+35,y+225,w-70,36);ctx.fillStyle="#8290a5";ctx.font="700 24px Arial";ctx.fillText("ERA",x+35,y+h-50);ctx.textAlign="right";ctx.fillStyle="#fff";ctx.font="900 62px Arial";ctx.fillText(era,x+w-35,y+h-42);ctx.textAlign="left"}
+function panel(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,tag:string,team:string,name:string,era:string){const eraText=String(era||"").trim();const shownEra=!eraText||eraText==="-"?"기록 없음":eraText;ctx.fillStyle="#151d29";round(ctx,x,y,w,h,28);ctx.fill();ctx.fillStyle="#8290a5";ctx.font="700 24px Arial";ctx.fillText(tag,x+35,y+55);ctx.fillStyle="#fff";ctx.font="900 44px Arial";wrap(ctx,team,x+35,y+125,w-70,52);ctx.fillStyle="#9aa8bb";ctx.font="700 28px Arial";wrap(ctx,name,x+35,y+225,w-70,36);ctx.fillStyle="#8290a5";ctx.font="800 28px Arial";ctx.fillText("선발 ERA",x+35,y+h-52);ctx.textAlign="right";ctx.fillStyle="#fff";ctx.font=shownEra==="기록 없음"?"900 34px Arial":"900 62px Arial";ctx.fillText(shownEra,x+w-35,y+h-42);ctx.textAlign="left"}
 function row(ctx:CanvasRenderingContext2D,x:number,y:number,a:string,b:string){ctx.fillStyle="#151d29";round(ctx,x,y,940,140,24);ctx.fill();ctx.fillStyle="#fff";ctx.font="900 42px Arial";ctx.fillText(a,x+35,y+85);ctx.textAlign="right";ctx.font="900 52px Arial";ctx.fillText(b,x+900,y+88);ctx.textAlign="left"}
 function round(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}

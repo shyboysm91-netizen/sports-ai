@@ -103,8 +103,25 @@ async function kbo(siteUrl: string, game: ContentGame, date: string): Promise<Re
   const h2hEdge = n(h2h?.wins) - n(h2h?.losses);
   const homeProb = Math.max(28, Math.min(72, Math.round(50 + (homeWin - awayWin) * .35 + recentEdge * 1.8 + h2hEdge * .8 + 3)));
   const [awayScore, homeScore] = projectedScores(averageRuns(awayRecentSummary), averageRuns(homeRecentSummary), homeProb);
-  const awayEra = s(awayPitching?.teamPitching?.era ?? awayPitching?.stats?.era);
-  const homeEra = s(homePitching?.teamPitching?.era ?? homePitching?.stats?.era);
+  const normalizePitcher = (value: unknown) => String(value ?? "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[^0-9A-Za-z가-힣]/g, "")
+    .toLowerCase();
+  const findStarterPitcher = (payload: any, name: unknown, code: unknown) => {
+    const pitchers = Array.isArray(payload?.pitchers) ? payload.pitchers : [];
+    const wantedCode = String(code ?? "").trim();
+    const wantedName = normalizePitcher(name);
+    return pitchers.find((row: any) => wantedCode && String(row?.pcode ?? row?.playerCode ?? row?.id ?? "") === wantedCode)
+      || pitchers.find((row: any) => wantedName && normalizePitcher(row?.player ?? row?.name ?? row?.playerName) === wantedName)
+      || pitchers.find((row: any) => {
+        const candidate = normalizePitcher(row?.player ?? row?.name ?? row?.playerName);
+        return wantedName && candidate && (candidate.includes(wantedName) || wantedName.includes(candidate));
+      });
+  };
+  const awayStarter = findStarterPitcher(awayPitching, game.awayStarter || game.awayStarterName || game.awayPitcher, game.awayStarterCode);
+  const homeStarter = findStarterPitcher(homePitching, game.homeStarter || game.homeStarterName || game.homePitcher, game.homeStarterCode);
+  const awayEra = s(awayStarter?.era, "기록 없음");
+  const homeEra = s(homeStarter?.era, "기록 없음");
   return {
     awayEra, homeEra,
     awayRecent: formText(awayRecentSummary), homeRecent: formText(homeRecentSummary),
