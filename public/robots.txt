@@ -1,4 +1,5 @@
-User-agent: *
+User-Agent: *
 Allow: /
 
 Sitemap: https://sports-ai-alpha.vercel.app/google-sitemap.xml
+Sitemap: https://sports-ai-alpha.vercel.app/analysis/sitemap.xml
