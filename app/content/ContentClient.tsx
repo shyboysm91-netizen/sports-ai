@@ -582,19 +582,196 @@ function drawSubtitle(ctx: CanvasRenderingContext2D, text: string, x: number, y:
 }
 
 function drawCard(ctx: CanvasRenderingContext2D, index: number, d: ContentData, headline: string) {
-  const W=1080,H=1350; ctx.clearRect(0,0,W,H); ctx.fillStyle="#0b1018"; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle="#141b26"; ctx.beginPath(); ctx.arc(1000,60,300,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="#fff"; ctx.font="800 28px Arial"; ctx.fillText(d.league,70,90); ctx.textAlign="right"; ctx.fillText(d.date,1010,90); ctx.textAlign="left";
-  const title=(text:string,y:number,size=72)=>{ctx.fillStyle="#fff";ctx.font=`900 ${size}px Arial`;wrap(ctx,text,70,y,930,size*1.17)};
-  if(index===0){ctx.fillStyle="#8aa0bd";ctx.font="800 28px Arial";ctx.fillText("오늘 반드시 봐야 할 경기",70,350);title(headline,70+350,72);ctx.font="900 52px Arial";ctx.fillText(`${d.away}  VS  ${d.home}`,70,710);ctx.font="900 110px Arial";ctx.fillText(`${d.homeWinRate}%`,70,900);ctx.font="700 27px Arial";ctx.fillStyle="#9aa8bb";ctx.fillText("AI 홈 승리 확률",380,890);ctx.fillText(d.summary,70,1020)}
-  if(index===1){title("선발투수 비교",300,70);panel(ctx,70,500,430,410,"원정",d.away,d.awayStarter,d.awayEra);panel(ctx,580,500,430,410,"홈",d.home,d.homeStarter,d.homeEra)}
-  if(index===2){title("최근 10경기 흐름",300,70);row(ctx,70,520,d.away,d.awayRecent);row(ctx,70,710,d.home,d.homeRecent);ctx.fillStyle="#9aa8bb";ctx.font="700 28px Arial";wrap(ctx,d.summary,70,970,920,42)}
-  if(index===3){title("최근 맞대결",300,70);ctx.textAlign="center";ctx.font="900 48px Arial";ctx.fillText(d.away,300,600);ctx.fillText(d.home,780,600);ctx.font="900 110px Arial";ctx.fillText(d.awayH2h,300,790);ctx.fillText(d.homeH2h,780,790);ctx.font="700 50px Arial";ctx.fillStyle="#667085";ctx.fillText(":",540,760);ctx.textAlign="left"}
-  if(index===4){ctx.fillStyle="#8aa0bd";ctx.font="800 28px Arial";ctx.fillText("SPORTS AI 최종 예측",70,330);title(`${d.home} 승리 예상`,390,78);ctx.textAlign="center";ctx.font="900 140px Arial";ctx.fillStyle="#fff";ctx.fillText(`${d.awayScore} : ${d.homeScore}`,540,760);ctx.font="900 52px Arial";ctx.fillStyle="#4d9cff";ctx.fillText(`승리 확률 ${d.homeWinRate}%`,540,900);ctx.textAlign="left";ctx.fillStyle="#9aa8bb";ctx.font="700 28px Arial";wrap(ctx,d.summary,70,1030,930,42)}
-  if(index===5){ctx.fillStyle="#8aa0bd";ctx.font="800 28px Arial";ctx.fillText("오늘 경기, 감으로 고르지 마세요",70,350);title("더 자세한 분석은\nSPORTS AI에서",420,82);ctx.fillStyle="#fff";ctx.fillRect(70,760,850,85);ctx.fillStyle="#111827";ctx.font="900 33px Arial";ctx.fillText("sports-ai-alpha.vercel.app",100,815);ctx.fillStyle="#9aa8bb";ctx.font="700 28px Arial";wrap(ctx,"선발 · 맞대결 · 최근 흐름 · AI 예측을 한 번에 확인하세요.",70,980,920,42)}
-  ctx.fillStyle="#6f7c90";ctx.font="900 24px Arial";ctx.fillText("SPORTS AI",70,1280);
+  const W = 1080, H = 1350;
+  ctx.clearRect(0, 0, W, H);
+  paintBackground(ctx, W, H, index);
+  drawHeader(ctx, d, index);
+
+  const rate = clampPercent(d.homeWinRate);
+  const awayRate = 100 - rate;
+  const predictedHome = rate >= 50;
+  const pickTeam = predictedHome ? d.home : d.away;
+  const pickRate = predictedHome ? rate : awayRate;
+
+  if (index === 0) {
+    pill(ctx, 70, 260, 390, 56, "오늘 가장 주목할 경기", "#ff4f67");
+    headlineText(ctx, headline, 70, 390, 900, 78);
+    versusBlock(ctx, d.away, d.home, 70, 650, 940, 200);
+    ctx.fillStyle = "#8ea0b8"; ctx.font = "800 28px Arial";
+    ctx.fillText("SPORTS AI 추천", 70, 940);
+    ctx.fillStyle = "#ffffff"; ctx.font = "900 62px Arial";
+    ctx.fillText(`${pickTeam} 우세`, 70, 1015);
+    progressBar(ctx, 70, 1075, 940, 42, pickRate, predictedHome ? "#4d9cff" : "#ff5b72");
+    ctx.fillStyle = "#ffffff"; ctx.font = "900 54px Arial"; ctx.textAlign = "right";
+    ctx.fillText(`${pickRate}%`, 1010, 1165); ctx.textAlign = "left";
+  }
+
+  if (index === 1) {
+    sectionTitle(ctx, "선발투수 비교", "오늘 승부를 가를 핵심", 70, 260);
+    starterCard(ctx, 70, 430, 440, 600, "원정", d.away, d.awayStarter, d.awayEra, "#ff5b72");
+    starterCard(ctx, 570, 430, 440, 600, "홈", d.home, d.homeStarter, d.homeEra, "#4d9cff");
+    vsCircle(ctx, 540, 725);
+    ctx.fillStyle = "#8ea0b8"; ctx.font = "700 26px Arial";
+    ctx.fillText("ERA가 낮을수록 안정적인 투구를 뜻합니다.", 70, 1125);
+  }
+
+  if (index === 2) {
+    sectionTitle(ctx, "최근 10경기", "팀 흐름을 한눈에", 70, 260);
+    formCard(ctx, 70, 440, 940, 260, d.away, d.awayRecent, "#ff5b72");
+    formCard(ctx, 70, 750, 940, 260, d.home, d.homeRecent, "#4d9cff");
+    summaryBox(ctx, d.summary, 70, 1080, 940, 120);
+  }
+
+  if (index === 3) {
+    sectionTitle(ctx, "최근 맞대결", "상대 전적에서 찾는 힌트", 70, 260);
+    matchupScore(ctx, 70, 470, 940, 430, d.away, d.home, d.awayH2h, d.homeH2h);
+    ctx.fillStyle = "#8ea0b8"; ctx.font = "800 27px Arial";
+    ctx.fillText("최근 맞대결 기준", 70, 990);
+    summaryBox(ctx, d.summary, 70, 1040, 940, 150);
+  }
+
+  if (index === 4) {
+    pill(ctx, 70, 270, 330, 56, "SPORTS AI 최종 예측", "#7c5cff");
+    ctx.fillStyle = "#ffffff"; ctx.font = "900 76px Arial";
+    wrap(ctx, `${pickTeam} 승리 예상`, 70, 430, 940, 90);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#8ea0b8"; ctx.font = "800 27px Arial"; ctx.fillText("예상 스코어", 540, 635);
+    ctx.fillStyle = "#ffffff"; ctx.font = "900 150px Arial"; ctx.fillText(`${d.awayScore} : ${d.homeScore}`, 540, 790);
+    ctx.fillStyle = predictedHome ? "#4d9cff" : "#ff5b72"; ctx.font = "900 72px Arial";
+    ctx.fillText(`승리 확률 ${pickRate}%`, 540, 930);
+    ctx.textAlign = "left";
+    progressBar(ctx, 70, 1000, 940, 46, pickRate, predictedHome ? "#4d9cff" : "#ff5b72");
+    summaryBox(ctx, d.summary, 70, 1100, 940, 110);
+  }
+
+  if (index === 5) {
+    pill(ctx, 70, 275, 320, 56, "분석은 여기서 끝이 아닙니다", "#16b981");
+    headlineText(ctx, "선발 · 최근 흐름 · 맞대결\n한 번에 확인하세요", 70, 420, 920, 78);
+    ctaBox(ctx, 70, 760, 940, 180);
+    ctx.fillStyle = "#8ea0b8"; ctx.font = "800 28px Arial";
+    wrap(ctx, "매일 업데이트되는 야구 분석을 Sports AI에서 확인하세요.", 70, 1040, 920, 42);
+  }
+
+  drawFooter(ctx, index);
 }
+
+function paintBackground(ctx: CanvasRenderingContext2D, w: number, h: number, index: number) {
+  const g = ctx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, "#07101d"); g.addColorStop(0.55, "#0c1524"); g.addColorStop(1, "#111b2c");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  ctx.save(); ctx.globalAlpha = 0.16;
+  ctx.fillStyle = index % 2 ? "#4d9cff" : "#7c5cff";
+  ctx.beginPath(); ctx.arc(1010, 80, 330, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ff5b72"; ctx.beginPath(); ctx.arc(-80, 1290, 260, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = "rgba(255,255,255,.045)"; ctx.lineWidth = 1;
+  for (let y = 180; y < h; y += 90) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+}
+
+function drawHeader(ctx: CanvasRenderingContext2D, d: ContentData, index: number) {
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 28px Arial"; ctx.fillText(d.league, 70, 92);
+  ctx.fillStyle = "#8ea0b8"; ctx.font = "800 25px Arial"; ctx.textAlign = "right"; ctx.fillText(d.date, 1010, 92);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fillRect(70, 125, 940, 2);
+  ctx.fillStyle = "#8ea0b8"; ctx.font = "800 22px Arial"; ctx.fillText(`${index + 1} / 6`, 70, 168);
+}
+
+function drawFooter(ctx: CanvasRenderingContext2D, index: number) {
+  ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fillRect(70, 1250, 940, 2);
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 24px Arial"; ctx.fillText("SPORTS AI", 70, 1300);
+  const x = 820; for (let i = 0; i < 6; i++) { ctx.fillStyle = i === index ? "#4d9cff" : "#2a3547"; round(ctx, x + i * 34, 1283, i === index ? 28 : 12, 12, 6); ctx.fill(); }
+}
+
+function sectionTitle(ctx: CanvasRenderingContext2D, title: string, sub: string, x: number, y: number) {
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 72px Arial"; ctx.fillText(title, x, y);
+  ctx.fillStyle = "#8ea0b8"; ctx.font = "800 28px Arial"; ctx.fillText(sub, x, y + 55);
+}
+
+function headlineText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, max: number, size: number) {
+  ctx.fillStyle = "#ffffff"; ctx.font = `900 ${size}px Arial`; wrap(ctx, text, x, y, max, size * 1.15);
+}
+
+function pill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, text: string, color: string) {
+  ctx.fillStyle = color; round(ctx, x, y, w, h, h / 2); ctx.fill();
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 25px Arial"; ctx.textAlign = "center"; ctx.fillText(text, x + w / 2, y + 37); ctx.textAlign = "left";
+}
+
+function versusBlock(ctx: CanvasRenderingContext2D, away: string, home: string, x: number, y: number, w: number, h: number) {
+  ctx.fillStyle = "rgba(255,255,255,.055)"; round(ctx, x, y, w, h, 32); ctx.fill();
+  teamBadge(ctx, x + 95, y + 100, away, "#ff5b72");
+  teamBadge(ctx, x + w - 95, y + 100, home, "#4d9cff");
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 44px Arial"; ctx.textAlign = "left"; ctx.fillText(shortTeam(away), x + 170, y + 118);
+  ctx.textAlign = "right"; ctx.fillText(shortTeam(home), x + w - 170, y + 118);
+  ctx.textAlign = "center"; ctx.fillStyle = "#8ea0b8"; ctx.font = "900 30px Arial"; ctx.fillText("VS", x + w / 2, y + 112); ctx.textAlign = "left";
+}
+
+function starterCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, tag: string, team: string, name: string, era: string, accent: string) {
+  ctx.fillStyle = "rgba(255,255,255,.055)"; round(ctx, x, y, w, h, 34); ctx.fill();
+  ctx.fillStyle = accent; round(ctx, x, y, w, 12, 6); ctx.fill();
+  pill(ctx, x + 30, y + 38, 100, 46, tag, accent);
+  teamBadge(ctx, x + w / 2, y + 155, team, accent, 68);
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 40px Arial"; ctx.textAlign = "center"; wrapCentered(ctx, shortTeam(team), x + w / 2, y + 270, w - 60, 46);
+  ctx.fillStyle = "#a8b6c9"; ctx.font = "800 28px Arial"; wrapCentered(ctx, name || "선발 미정", x + w / 2, y + 365, w - 60, 36);
+  const shownEra = cleanStat(era);
+  ctx.fillStyle = "#8ea0b8"; ctx.font = "800 24px Arial"; ctx.fillText("시즌 ERA", x + w / 2, y + 485);
+  ctx.fillStyle = shownEra === "기록 없음" ? "#a8b6c9" : "#ffffff"; ctx.font = shownEra === "기록 없음" ? "900 34px Arial" : "900 78px Arial";
+  ctx.fillText(shownEra, x + w / 2, y + 555); ctx.textAlign = "left";
+}
+
+function formCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, team: string, recent: string, accent: string) {
+  ctx.fillStyle = "rgba(255,255,255,.055)"; round(ctx, x, y, w, h, 30); ctx.fill();
+  teamBadge(ctx, x + 75, y + 78, team, accent, 48);
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 42px Arial"; ctx.fillText(shortTeam(team), x + 145, y + 92);
+  const wl = parseWinLoss(recent);
+  ctx.textAlign = "right"; ctx.fillStyle = accent; ctx.font = "900 52px Arial"; ctx.fillText(wl.label, x + w - 40, y + 94); ctx.textAlign = "left";
+  const results = buildFormDots(wl.wins, wl.losses, 10);
+  results.forEach((win, i) => { ctx.fillStyle = win ? "#22c55e" : "#ef4444"; ctx.beginPath(); ctx.arc(x + 70 + i * 82, y + 180, 25, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#ffffff"; ctx.font = "900 20px Arial"; ctx.textAlign = "center"; ctx.fillText(win ? "승" : "패", x + 70 + i * 82, y + 188); });
+  ctx.textAlign = "left";
+}
+
+function matchupScore(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, away: string, home: string, awayRecord: string, homeRecord: string) {
+  ctx.fillStyle = "rgba(255,255,255,.055)"; round(ctx, x, y, w, h, 34); ctx.fill();
+  teamBadge(ctx, x + 165, y + 120, away, "#ff5b72", 62); teamBadge(ctx, x + w - 165, y + 120, home, "#4d9cff", 62);
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 40px Arial"; ctx.textAlign = "center"; ctx.fillText(shortTeam(away), x + 165, y + 225); ctx.fillText(shortTeam(home), x + w - 165, y + 225);
+  ctx.font = "900 92px Arial"; ctx.fillStyle = "#ff5b72"; ctx.fillText(cleanStat(awayRecord), x + 165, y + 345); ctx.fillStyle = "#4d9cff"; ctx.fillText(cleanStat(homeRecord), x + w - 165, y + 345);
+  ctx.fillStyle = "#8ea0b8"; ctx.font = "900 34px Arial"; ctx.fillText("VS", x + w / 2, y + 280); ctx.textAlign = "left";
+}
+
+function ctaBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const g = ctx.createLinearGradient(x, y, x + w, y + h); g.addColorStop(0, "#4d9cff"); g.addColorStop(1, "#7c5cff");
+  ctx.fillStyle = g; round(ctx, x, y, w, h, 32); ctx.fill();
+  ctx.fillStyle = "#ffffff"; ctx.font = "900 31px Arial"; ctx.fillText("지금 전체 분석 보기", x + 45, y + 65);
+  ctx.font = "900 38px Arial"; ctx.fillText("sports-ai-alpha.vercel.app", x + 45, y + 125);
+  ctx.textAlign = "right"; ctx.font = "900 60px Arial"; ctx.fillText("→", x + w - 45, y + 115); ctx.textAlign = "left";
+}
+
+function summaryBox(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, w: number, h: number) {
+  ctx.fillStyle = "rgba(255,255,255,.045)"; round(ctx, x, y, w, h, 24); ctx.fill();
+  ctx.fillStyle = "#a8b6c9"; ctx.font = "700 25px Arial"; wrap(ctx, text, x + 28, y + 42, w - 56, 35);
+}
+
+function progressBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, percent: number, color: string) {
+  ctx.fillStyle = "#263247"; round(ctx, x, y, w, h, h / 2); ctx.fill();
+  const fillW = Math.max(h, w * Math.max(0, Math.min(100, percent)) / 100);
+  ctx.fillStyle = color; round(ctx, x, y, fillW, h, h / 2); ctx.fill();
+}
+
+function teamBadge(ctx: CanvasRenderingContext2D, x: number, y: number, team: string, color: string, r = 52) {
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#ffffff"; ctx.font = `900 ${Math.round(r * .72)}px Arial`; ctx.textAlign = "center"; ctx.fillText(teamInitial(team), x, y + Math.round(r * .25)); ctx.textAlign = "left";
+}
+
+function vsCircle(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.fillStyle = "#0b1322"; ctx.beginPath(); ctx.arc(x, y, 48, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#34435a"; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = "#ffffff"; ctx.font = "900 26px Arial"; ctx.textAlign = "center"; ctx.fillText("VS", x, y + 9); ctx.textAlign = "left";
+}
+
+function cleanStat(value: string) { const s = String(value || "").trim(); return !s || s === "-" || s === "불러오는 중" ? "기록 없음" : s; }
+function clampPercent(value: string) { const n = Number(String(value || "").replace(/[^0-9.]/g, "")); return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 50; }
+function teamInitial(team: string) { const clean = String(team || "?").replace(/[^A-Za-z0-9가-힣]/g, ""); return clean.slice(0, 1).toUpperCase() || "?"; }
+function shortTeam(team: string) { const s = String(team || "팀").trim(); return s.length > 10 ? `${s.slice(0, 10)}…` : s; }
+function parseWinLoss(value: string) { const s = String(value || ""); const w = Number((s.match(/(\d+)\s*승/) || [])[1] || 0); const l = Number((s.match(/(\d+)\s*패/) || [])[1] || 0); return { wins: w, losses: l, label: w || l ? `${w}승 ${l}패` : cleanStat(s) }; }
+function buildFormDots(wins: number, losses: number, count: number) { const total = Math.max(1, wins + losses); const winCount = Math.max(0, Math.min(count, Math.round(count * wins / total))); return Array.from({ length: count }, (_, i) => i < winCount); }
+function wrapCentered(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, max: number, line: number) { const old = ctx.textAlign; ctx.textAlign = "center"; const chars = String(text || ""); let row = ""; const rows: string[] = []; for (const ch of chars) { const test = row + ch; if (ctx.measureText(test).width > max && row) { rows.push(row); row = ch; } else row = test; } if (row) rows.push(row); rows.slice(0, 2).forEach((r, i) => ctx.fillText(r, x, y + i * line)); ctx.textAlign = old; }
 function wrap(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,max:number,line:number){String(text||"").split("\n").forEach((part)=>{let lineText="";for(const ch of part){const test=lineText+ch;if(ctx.measureText(test).width>max&&lineText){ctx.fillText(lineText,x,y);y+=line;lineText=ch}else lineText=test}if(lineText){ctx.fillText(lineText,x,y);y+=line}})}
-function panel(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,tag:string,team:string,name:string,era:string){const eraText=String(era||"").trim();const shownEra=!eraText||eraText==="-"?"기록 없음":eraText;ctx.fillStyle="#151d29";round(ctx,x,y,w,h,28);ctx.fill();ctx.fillStyle="#8290a5";ctx.font="700 24px Arial";ctx.fillText(tag,x+35,y+55);ctx.fillStyle="#fff";ctx.font="900 44px Arial";wrap(ctx,team,x+35,y+125,w-70,52);ctx.fillStyle="#9aa8bb";ctx.font="700 28px Arial";wrap(ctx,name,x+35,y+225,w-70,36);ctx.fillStyle="#8290a5";ctx.font="800 28px Arial";ctx.fillText("선발 ERA",x+35,y+h-52);ctx.textAlign="right";ctx.fillStyle="#fff";ctx.font=shownEra==="기록 없음"?"900 34px Arial":"900 62px Arial";ctx.fillText(shownEra,x+w-35,y+h-42);ctx.textAlign="left"}
-function row(ctx:CanvasRenderingContext2D,x:number,y:number,a:string,b:string){ctx.fillStyle="#151d29";round(ctx,x,y,940,140,24);ctx.fill();ctx.fillStyle="#fff";ctx.font="900 42px Arial";ctx.fillText(a,x+35,y+85);ctx.textAlign="right";ctx.font="900 52px Arial";ctx.fillText(b,x+900,y+88);ctx.textAlign="left"}
 function round(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
