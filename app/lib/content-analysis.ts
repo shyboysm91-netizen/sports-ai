@@ -85,24 +85,26 @@ async function kbo(siteUrl: string, game: ContentGame, date: string): Promise<Re
   const away = game.away || "원정팀", home = game.home || "홈팀";
   const awayCode = KBO_CODES[away], homeCode = KBO_CODES[home];
   if (!awayCode || !homeCode) throw new Error("KBO 팀 코드를 찾지 못했습니다.");
-  const [standings, awayForm, homeForm, awayPitching, homePitching] = await Promise.all([
+
+  // 경기 상세 페이지와 완전히 같은 원본 데이터를 사용합니다.
+  const [standings, batting, awayForm, homeForm, awayPitching, homePitching] = await Promise.all([
     json(`${siteUrl}/api/kbo/standings`),
+    json(`${siteUrl}/api/kbo/team-batting`),
     json(`${siteUrl}/api/kbo/team-form?team=${awayCode}&opponent=${homeCode}&date=${encodeURIComponent(date)}`),
     json(`${siteUrl}/api/kbo/team-form?team=${homeCode}&opponent=${awayCode}&date=${encodeURIComponent(date)}`),
     json(`${siteUrl}/api/kbo/team-pitching?team=${awayCode}`),
     json(`${siteUrl}/api/kbo/team-pitching?team=${homeCode}`),
   ]);
+
   const aStanding = standings?.standings?.find((row: any) => row.team === away);
   const hStanding = standings?.standings?.find((row: any) => row.team === home);
+  const aBatting = batting?.batting?.find((row: any) => row.team === away);
+  const hBatting = batting?.batting?.find((row: any) => row.team === home);
   const awayRecentSummary = awayForm?.recent10?.summary;
   const homeRecentSummary = homeForm?.recent10?.summary;
-  const h2h = homeForm?.headToHead?.summary;
-  const awayWin = pct(aStanding?.winningPercentage || .5);
-  const homeWin = pct(hStanding?.winningPercentage || .5);
-  const recentEdge = n(homeRecentSummary?.wins) - n(awayRecentSummary?.wins);
-  const h2hEdge = n(h2h?.wins) - n(h2h?.losses);
-  const homeProb = Math.max(28, Math.min(72, Math.round(50 + (homeWin - awayWin) * .35 + recentEdge * 1.8 + h2hEdge * .8 + 3)));
-  const [awayScore, homeScore] = projectedScores(averageRuns(awayRecentSummary), averageRuns(homeRecentSummary), homeProb);
+  const awayH2hSummary = awayForm?.headToHead?.summary;
+  const homeH2hSummary = homeForm?.headToHead?.summary;
+
   const normalizePitcher = (value: unknown) => String(value ?? "")
     .replace(/\([^)]*\)/g, "")
     .replace(/[^0-9A-Za-z가-힣]/g, "")
@@ -118,16 +120,99 @@ async function kbo(siteUrl: string, game: ContentGame, date: string): Promise<Re
         return wantedName && candidate && (candidate.includes(wantedName) || wantedName.includes(candidate));
       });
   };
-  const awayStarter = findStarterPitcher(awayPitching, game.awayStarter || game.awayStarterName || game.awayPitcher, game.awayStarterCode);
-  const homeStarter = findStarterPitcher(homePitching, game.homeStarter || game.homeStarterName || game.homePitcher, game.homeStarterCode);
-  const awayEra = s(awayStarter?.era, "기록 없음");
-  const homeEra = s(homeStarter?.era, "기록 없음");
+
+  const awayStarterName = game.awayStarter || game.awayStarterName || game.awayPitcher || "";
+  const homeStarterName = game.homeStarter || game.homeStarterName || game.homePitcher || "";
+  const awayStarter = findStarterPitcher(awayPitching, awayStarterName, game.awayStarterCode);
+  const homeStarter = findStarterPitcher(homePitching, homeStarterName, game.homeStarterCode);
+
+  const pitcherDetail = async (side: "away" | "home", pitcher: any, starterName: string) => {
+    if (!pitcher && !starterName) return null;
+    const team = side === "away" ? awayCode : homeCode;
+    const opponent = side === "away" ? homeCode : awayCode;
+    const params = new URLSearchParams({
+      pcode: String(pitcher?.pcode ?? pitcher?.playerCode ?? game[side === "away" ? "awayStarterCode" : "homeStarterCode"] ?? ""),
+      name: starterName || String(pitcher?.player ?? pitcher?.name ?? ""),
+      opponent,
+      stadium: String(game.stadium || ""),
+      team,
+      homeTeam: homeCode,
+      side,
+      date,
+      time: String(game.time || ""),
+      detailVersion: "6",
+    });
+    try { return await json(`${siteUrl}/api/kbo/pitcher-vs-team?${params}`); }
+    catch { return null; }
+  };
+
+  const [awayDetail, homeDetail] = await Promise.all([
+    pitcherDetail("away", awayStarter, String(awayStarterName)),
+    pitcherDetail("home", homeStarter, String(homeStarterName)),
+  ]);
+
+  // 아래 계산식은 app/game/GameClient.tsx의 makePrediction과 동일합니다.
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+  const safe = (value: unknown, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+  const awaySeason = safe(aStanding?.winningPercentage, 0.5);
+  const homeSeason = safe(hStanding?.winningPercentage, 0.5);
+  const awayRecentGames = safe(awayRecentSummary?.games);
+  const homeRecentGames = safe(homeRecentSummary?.games);
+  const awayRecentRate = awayRecentGames ? safe(awayRecentSummary?.wins) / awayRecentGames : 0.5;
+  const homeRecentRate = homeRecentGames ? safe(homeRecentSummary?.wins) / homeRecentGames : 0.5;
+  const awayOps = safe(aBatting?.ops, 0.7);
+  const homeOps = safe(hBatting?.ops, 0.7);
+  const awayEraNumber = safe(awayDetail?.seasonStats?.era ?? awayStarter?.era, 4.5);
+  const homeEraNumber = safe(homeDetail?.seasonStats?.era ?? homeStarter?.era, 4.5);
+  const awayVsEra = awayDetail?.found ? safe(awayDetail?.stats?.era, awayEraNumber) : awayEraNumber;
+  const homeVsEra = homeDetail?.found ? safe(homeDetail?.stats?.era, homeEraNumber) : homeEraNumber;
+  const h2hGames = safe(awayH2hSummary?.games);
+  const awayH2HRate = h2hGames ? safe(awayH2hSummary?.wins) / h2hGames : 0.5;
+  const homeH2HRate = h2hGames ? safe(homeH2hSummary?.wins) / h2hGames : 0.5;
+  const awayRunDiff = safe(awayRecentSummary?.averageRunsScored) - safe(awayRecentSummary?.averageRunsAllowed);
+  const homeRunDiff = safe(homeRecentSummary?.averageRunsScored) - safe(homeRecentSummary?.averageRunsAllowed);
+
+  let homeEdge = 0.028;
+  homeEdge += (homeSeason - awaySeason) * 0.25;
+  homeEdge += (homeRecentRate - awayRecentRate) * 0.18;
+  homeEdge += (homeOps - awayOps) * 0.26;
+  homeEdge += (awayVsEra - homeVsEra) * 0.017;
+  homeEdge += (homeRunDiff - awayRunDiff) * 0.018;
+  if (h2hGames >= 4) homeEdge += (homeH2HRate - awayH2HRate) * 0.08;
+
+  const homeProbRaw = clamp(0.5 + homeEdge, 0.24, 0.76);
+  const awayProbRaw = 1 - homeProbRaw;
+  const leagueBase = 4.45;
+  const awayRecentRuns = awayRecentGames ? safe(awayRecentSummary?.averageRunsScored, leagueBase) : safe(aBatting?.averageRunsPerGame, leagueBase);
+  const homeRecentRuns = homeRecentGames ? safe(homeRecentSummary?.averageRunsScored, leagueBase) : safe(hBatting?.averageRunsPerGame, leagueBase);
+  const awayScoreRaw = awayRecentRuns * 0.5 + leagueBase * 0.28 + (5.0 - homeVsEra) * 0.16 + Math.max(-0.4, awayRunDiff * 0.08);
+  const homeScoreRaw = homeRecentRuns * 0.5 + leagueBase * 0.28 + (5.0 - awayVsEra) * 0.16 + Math.max(-0.4, homeRunDiff * 0.08) + 0.15;
+  const winner = homeProbRaw >= awayProbRaw ? home : away;
+  const expectedTotal = Math.round((awayScoreRaw + homeScoreRaw) * 10) / 10;
+  const probabilityGap = Math.abs(homeProbRaw - awayProbRaw);
+  const rawScoreGap = Math.abs(homeScoreRaw - awayScoreRaw);
+  const targetMargin = clamp(Math.round(probabilityGap * 10 + rawScoreGap * 0.55), 1, 5);
+  const displayedTotal = clamp(Math.round(expectedTotal), 3, 20);
+  let winnerScore = Math.round((displayedTotal + targetMargin) / 2);
+  let loserScore = displayedTotal - winnerScore;
+  if (loserScore < 1) { loserScore = 1; winnerScore = Math.min(10, Math.max(2, displayedTotal - loserScore)); }
+  winnerScore = clamp(winnerScore, 2, 10);
+  loserScore = clamp(loserScore, 1, 9);
+  let awayScore = winner === away ? winnerScore : loserScore;
+  let homeScore = winner === home ? winnerScore : loserScore;
+  if (winner === home && homeScore <= awayScore) homeScore = Math.min(10, awayScore + 1);
+  else if (winner === away && awayScore <= homeScore) awayScore = Math.min(10, homeScore + 1);
+
+  const homeProb = Math.round(homeProbRaw * 100);
+  const awayEra = s(awayDetail?.seasonStats?.era ?? awayStarter?.era, "기록 없음");
+  const homeEra = s(homeDetail?.seasonStats?.era ?? homeStarter?.era, "기록 없음");
   return {
     awayEra, homeEra,
     awayRecent: formText(awayRecentSummary), homeRecent: formText(homeRecentSummary),
-    awayH2h: h2h ? `${n(h2h.losses)}승` : "자료 없음", homeH2h: h2h ? `${n(h2h.wins)}승` : "자료 없음",
+    awayH2h: awayH2hSummary ? `${safe(awayH2hSummary.wins)}승` : "자료 없음",
+    homeH2h: homeH2hSummary ? `${safe(homeH2hSummary.wins)}승` : "자료 없음",
     awayScore: String(awayScore), homeScore: String(homeScore), homeWinRate: String(homeProb),
-    summary: `${homeProb >= 50 ? home : away}가 시즌 승률과 최근 흐름에서 우세합니다. 선발 평균자책점은 ${away} ${awayEra}, ${home} ${homeEra}이며 최근 10경기와 맞대결 흐름을 함께 반영했습니다.`,
+    summary: `${winner} 우세입니다. 경기 상세 분석과 동일한 시즌 전력·최근 흐름·팀 OPS·선발 상대 성적·최근 득실점·맞대결 계산을 그대로 반영했습니다.`,
   };
 }
 
