@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
+import Script from "next/script";
 import "./globals.css";
 
 const siteUrl = "https://sports-ai-alpha.vercel.app";
@@ -121,6 +122,8 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col">
+        <Script async src="https://www.googletagmanager.com/gtag/js?id=G-XHP41FCMNQ" />
+        <Script id="ga4">{`window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-XHP41FCMNQ');`}</Script>
         {children}
         <Analytics />
       </body>
