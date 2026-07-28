@@ -52,8 +52,10 @@ const blank = (league: League, date: string): ContentData => ({
   awayScore: "-", homeScore: "-", homeWinRate: "-", summary: "분석 페이지의 상세값을 확인해 필요한 항목만 수정하세요.",
 });
 
-function koreaDate() {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+function koreaDate(offsetDays = 0) {
+  const now = new Date();
+  now.setUTCDate(now.getUTCDate() + offsetDays);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
 
 function pickStarter(game: Game, side: "away" | "home") {
@@ -483,7 +485,23 @@ export default function ContentPage() {
             </select>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-3" />
           </div>
-          <button onClick={loadGames} disabled={loading} className="mt-3 w-full rounded-xl bg-blue-600 px-4 py-3 font-black disabled:opacity-50">{loading ? "불러오는 중..." : "오늘 경기 불러오기"}</button>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setDate(koreaDate())}
+              className={`rounded-xl border px-4 py-3 font-black ${date === koreaDate() ? "border-blue-500 bg-blue-600" : "border-slate-700 bg-slate-950"}`}
+            >
+              오늘 경기
+            </button>
+            <button
+              type="button"
+              onClick={() => setDate(koreaDate(1))}
+              className={`rounded-xl border px-4 py-3 font-black ${date === koreaDate(1) ? "border-blue-500 bg-blue-600" : "border-slate-700 bg-slate-950"}`}
+            >
+              내일 경기
+            </button>
+          </div>
+          <button onClick={loadGames} disabled={loading} className="mt-3 w-full rounded-xl bg-blue-600 px-4 py-3 font-black disabled:opacity-50">{loading ? "불러오는 중..." : "선택 날짜 경기 불러오기"}</button>
           <p className="mt-3 text-xs leading-5 text-slate-400">{message}</p>
           {games.length > 0 && <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">{games.map((g, i) => <button key={`${g.gamePk || i}-${g.away}-${g.home}`} onClick={() => selectGame(g)} className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-left hover:border-blue-500"><b>{g.away} vs {g.home}</b><p className="mt-1 text-xs text-slate-500">{pickStarter(g,"away")} · {pickStarter(g,"home")}</p></button>)}</div>}
         </div>
