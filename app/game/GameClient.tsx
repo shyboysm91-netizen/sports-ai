@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { dataCacheUrl } from "../lib/client-data-cache";
 import { savePregamePrediction } from "../lib/prediction-history";
 
@@ -2146,12 +2146,34 @@ function HeadToHeadComparison({
 
 function GameDetailContent() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const routeParts = pathname.split("/").filter(Boolean);
+  const isAnalysisRoute = routeParts[0] === "analysis" && routeParts[1]?.toLowerCase() === "kbo";
+  const routeDate = isAnalysisRoute ? decodeURIComponent(routeParts[2] ?? "") : "";
+  const routeMatchup = isAnalysisRoute ? decodeURIComponent(routeParts[3] ?? "") : "";
+  const matchupParts = routeMatchup.split("-vs-");
+  const routeAwaySlug = matchupParts.length >= 2 ? matchupParts[0] : "";
+  const routeHomeSlug = matchupParts.length >= 2 ? matchupParts.slice(1).join("-vs-") : "";
+  const routeTeamNames: Record<string, string> = {
+    kia: "KIA 타이거즈", tigers: "KIA 타이거즈",
+    samsung: "삼성 라이온즈", lions: "삼성 라이온즈",
+    lg: "LG 트윈스", twins: "LG 트윈스",
+    doosan: "두산 베어스", bears: "두산 베어스",
+    kt: "KT 위즈", wiz: "KT 위즈",
+    ssg: "SSG 랜더스", landers: "SSG 랜더스",
+    lotte: "롯데 자이언츠", giants: "롯데 자이언츠",
+    hanwha: "한화 이글스", eagles: "한화 이글스",
+    nc: "NC 다이노스", dinos: "NC 다이노스",
+    kiwoom: "키움 히어로즈", heroes: "키움 히어로즈",
+  };
+  const routeAway = routeTeamNames[routeAwaySlug.toLowerCase()] ?? routeAwaySlug;
+  const routeHome = routeTeamNames[routeHomeSlug.toLowerCase()] ?? routeHomeSlug;
 
   const league = searchParams.get("league") ?? "KBO";
-  const date = searchParams.get("date") ?? "";
+  const date = searchParams.get("date") ?? routeDate;
   const time = searchParams.get("time") ?? "";
-  const away = searchParams.get("away") ?? "원정팀";
-  const home = searchParams.get("home") ?? "홈팀";
+  const away = searchParams.get("away") ?? routeAway ?? "원정팀";
+  const home = searchParams.get("home") ?? routeHome ?? "홈팀";
   const stadium = searchParams.get("stadium") ?? "";
   const awayStarterName = searchParams.get("awayStarter") ?? "";
   const homeStarterName = searchParams.get("homeStarter") ?? "";

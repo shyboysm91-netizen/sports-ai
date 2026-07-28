@@ -49,6 +49,36 @@ function normalizeLeague(value: string): League {
   return league === "mlb" || league === "npb" ? league : "kbo";
 }
 
+
+const KBO_TEAM_ALIASES: Record<string, string> = {
+  kia: "KIA 타이거즈",
+  tigers: "KIA 타이거즈",
+  samsung: "삼성 라이온즈",
+  lions: "삼성 라이온즈",
+  lg: "LG 트윈스",
+  twins: "LG 트윈스",
+  doosan: "두산 베어스",
+  bears: "두산 베어스",
+  kt: "KT 위즈",
+  wiz: "KT 위즈",
+  ssg: "SSG 랜더스",
+  landers: "SSG 랜더스",
+  lotte: "롯데 자이언츠",
+  giants: "롯데 자이언츠",
+  hanwha: "한화 이글스",
+  eagles: "한화 이글스",
+  nc: "NC 다이노스",
+  dinos: "NC 다이노스",
+  kiwoom: "키움 히어로즈",
+  heroes: "키움 히어로즈",
+};
+
+function normalizeTeamName(league: League, value: string) {
+  const decoded = safeDecode(value).trim();
+  if (league !== "kbo") return decoded;
+  return KBO_TEAM_ALIASES[decoded.toLowerCase()] ?? decoded;
+}
+
 function leagueLabel(league: League) {
   return league.toUpperCase();
 }
@@ -68,8 +98,8 @@ export async function generateMetadata({
   const query = await searchParams;
   const league = normalizeLeague(route.league);
   const parsed = parseMatchup(route.matchup);
-  const away = first(query.away) || parsed.away;
-  const home = first(query.home) || parsed.home;
+  const away = normalizeTeamName(league, first(query.away) || parsed.away);
+  const home = normalizeTeamName(league, first(query.home) || parsed.home);
   const date = first(query.date) || route.date;
   const label = leagueLabel(league);
   const title = `${away} vs ${home} ${label} AI 분석 및 승부예측`;
@@ -109,13 +139,13 @@ export default async function AnalysisGamePage({
   const query = await searchParams;
   const league = normalizeLeague(route.league);
   const parsed = parseMatchup(route.matchup);
-  const away = first(query.away) || parsed.away;
-  const home = first(query.home) || parsed.home;
+  const away = normalizeTeamName(league, first(query.away) || parsed.away);
+  const home = normalizeTeamName(league, first(query.home) || parsed.home);
   const date = first(query.date) || route.date;
 
   // 검색 결과의 깨끗한 URL로 직접 들어온 경우에도 기존 분석 화면이
   // 필요한 기본 검색값을 받을 수 있도록 한 번만 보완합니다.
-  if (!first(query.away) || !first(query.home) || !first(query.date)) {
+  if (league !== "kbo" && (!first(query.away) || !first(query.home) || !first(query.date))) {
     const nextQuery = new URLSearchParams();
     for (const [key, raw] of Object.entries(query)) {
       const value = first(raw);
