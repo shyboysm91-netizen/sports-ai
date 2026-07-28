@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import KboGameClient from "../../../../game/GameClient";
 import MlbGameClient from "../../../../mlb-game/GameClient";
 import NpbGameClient from "../../../../npb-game/GameClient";
+import { matchupSlug, teamNameFromSlug } from "../../../../lib/analysis-slug";
 
 const BASE_URL = "https://sports-ai-alpha.vercel.app";
 
@@ -50,41 +51,16 @@ function normalizeLeague(value: string): League {
 }
 
 
-const KBO_TEAM_ALIASES: Record<string, string> = {
-  kia: "KIA 타이거즈",
-  tigers: "KIA 타이거즈",
-  samsung: "삼성 라이온즈",
-  lions: "삼성 라이온즈",
-  lg: "LG 트윈스",
-  twins: "LG 트윈스",
-  doosan: "두산 베어스",
-  bears: "두산 베어스",
-  kt: "KT 위즈",
-  wiz: "KT 위즈",
-  ssg: "SSG 랜더스",
-  landers: "SSG 랜더스",
-  lotte: "롯데 자이언츠",
-  giants: "롯데 자이언츠",
-  hanwha: "한화 이글스",
-  eagles: "한화 이글스",
-  nc: "NC 다이노스",
-  dinos: "NC 다이노스",
-  kiwoom: "키움 히어로즈",
-  heroes: "키움 히어로즈",
-};
-
 function normalizeTeamName(league: League, value: string) {
-  const decoded = safeDecode(value).trim();
-  if (league !== "kbo") return decoded;
-  return KBO_TEAM_ALIASES[decoded.toLowerCase()] ?? decoded;
+  return teamNameFromSlug(league, safeDecode(value));
 }
 
 function leagueLabel(league: League) {
   return league.toUpperCase();
 }
 
-function cleanCanonical(league: League, date: string, matchup: string) {
-  return `${BASE_URL}/analysis/${league}/${encodeURIComponent(date)}/${matchup}`;
+function cleanCanonical(league: League, date: string, away: string, home: string) {
+  return `${BASE_URL}/analysis/${league}/${encodeURIComponent(date)}/${matchupSlug(league, away, home)}`;
 }
 
 export async function generateMetadata({
@@ -104,7 +80,7 @@ export async function generateMetadata({
   const label = leagueLabel(league);
   const title = `${away} vs ${home} ${label} AI 분석 및 승부예측`;
   const description = `${date} ${away} vs ${home} 경기의 선발투수, 최근 10경기, 맞대결, 팀 전력과 AI 승리 확률 및 예상 결과를 확인하세요.`;
-  const canonical = cleanCanonical(league, route.date, route.matchup);
+  const canonical = cleanCanonical(league, route.date, away, home);
 
   return {
     title,
@@ -161,7 +137,7 @@ export default async function AnalysisGamePage({
     );
   }
 
-  const canonical = cleanCanonical(league, route.date, route.matchup);
+  const canonical = cleanCanonical(league, route.date, away, home);
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
