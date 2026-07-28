@@ -1,9 +1,20 @@
 import type { MetadataRoute } from "next";
+
 const BASE_URL = "https://sports-ai-alpha.vercel.app";
+
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: [{ userAgent: "*", allow: "/", disallow: ["/admin-stats", "/api/"] }],
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/admin-stats", "/api/"],
+      },
+    ],
+    sitemap: [
+      `${BASE_URL}/sitemap.xml`,
+      `${BASE_URL}/sitemap-analysis.xml`,
+    ],
     host: BASE_URL,
   };
 }
