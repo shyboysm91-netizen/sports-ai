@@ -1,4 +1,4 @@
-Sports AI DB 자동수집 v31
+장군 AI DB 자동수집 v31
 
 이번 구조
 외부 API/공식 기록 → 10분 자동 수집 → Supabase DB 저장 → 방문자는 DB 조회

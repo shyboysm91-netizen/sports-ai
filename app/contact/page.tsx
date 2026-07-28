@@ -6,7 +6,7 @@ export default function ContactPage() {
   return (
     <main className="min-h-screen bg-slate-950 px-5 py-12 text-white">
       <div className="mx-auto max-w-3xl">
-        <Link href="/" className="text-sm font-black text-blue-400">← Sports AI 홈</Link>
+        <Link href="/" className="text-sm font-black text-blue-400">← 장군 AI 홈</Link>
 
         <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-7 sm:p-10">
           <p className="text-sm font-black text-blue-400">CONTACT</p>
@@ -14,7 +14,7 @@ export default function ContactPage() {
 
           <div className="mt-7 space-y-6 text-sm leading-7 text-slate-300">
             <p>
-              Sports AI 서비스 오류, 데이터 문의, 광고 및 제휴 문의는 아래 이메일로
+              장군 AI 서비스 오류, 데이터 문의, 광고 및 제휴 문의는 아래 이메일로
               보내주세요.
             </p>
 

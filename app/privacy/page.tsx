@@ -6,7 +6,7 @@ export default function PrivacyPage() {
   return (
     <main className="min-h-screen bg-slate-950 px-5 py-12 text-white">
       <div className="mx-auto max-w-3xl">
-        <Link href="/" className="text-sm font-black text-blue-400">← Sports AI 홈</Link>
+        <Link href="/" className="text-sm font-black text-blue-400">← 장군 AI 홈</Link>
 
         <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-7 sm:p-10">
           <p className="text-sm font-black text-blue-400">PRIVACY POLICY</p>
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
             <section>
               <h2 className="text-lg font-black text-white">1. 개인정보의 수집</h2>
               <p className="mt-2">
-                Sports AI는 별도의 회원가입 기능을 운영하지 않는 경우 방문자의 이름,
+                장군 AI는 별도의 회원가입 기능을 운영하지 않는 경우 방문자의 이름,
                 전화번호 등 개인을 직접 식별하는 정보를 자동으로 수집하지 않습니다.
                 문의 이메일을 보내는 경우 이메일 주소와 문의 내용이 수집될 수 있습니다.
               </p>
@@ -59,7 +59,7 @@ export default function PrivacyPage() {
             <section>
               <h2 className="text-lg font-black text-white">6. 외부 링크</h2>
               <p className="mt-2">
-                Sports AI는 외부 사이트로 연결되는 링크를 제공할 수 있으며, 외부 사이트의
+                장군 AI는 외부 사이트로 연결되는 링크를 제공할 수 있으며, 외부 사이트의
                 개인정보 처리 방식에 대해서는 책임지지 않습니다.
               </p>
             </section>

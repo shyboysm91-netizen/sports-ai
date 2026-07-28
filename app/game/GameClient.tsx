@@ -2559,7 +2559,7 @@ function GameDetailContent() {
       <header className="border-b border-slate-800 bg-slate-900">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
           <Link href="/" className="text-2xl font-black">
-            Sports AI
+            장군 AI
           </Link>
 
           <span className="rounded-full bg-blue-600 px-4 py-2 text-xs font-black">

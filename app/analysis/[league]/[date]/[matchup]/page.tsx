@@ -90,7 +90,7 @@ export async function generateMetadata({
       title,
       description,
       url: canonical,
-      siteName: "Sports AI",
+      siteName: "장군 AI",
       type: "article",
       locale: "ko_KR",
       images: [{ url: `${canonical}/opengraph-image`, width: 1200, height: 630, alt: `${away} vs ${home} 경기 분석` }],
@@ -153,7 +153,7 @@ export default async function AnalysisGamePage({
         awayTeam: { "@type": "SportsTeam", name: away },
         organizer: {
           "@type": "Organization",
-          name: "Sports AI",
+          name: "장군 AI",
           url: BASE_URL,
         },
       },
@@ -167,7 +167,7 @@ export default async function AnalysisGamePage({
         isPartOf: {
           "@type": "WebSite",
           "@id": `${BASE_URL}/#website`,
-          name: "Sports AI",
+          name: "장군 AI",
           url: BASE_URL,
         },
         about: { "@id": `${canonical}#event` },
@@ -189,7 +189,7 @@ export default async function AnalysisGamePage({
             name: `${away} vs ${home} 예상 결과는 어떻게 계산하나요?`,
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Sports AI는 공개된 경기 기록과 선발투수, 타격, 불펜, 최근 흐름 등의 데이터를 종합해 예상 결과를 제공합니다.",
+              text: "장군 AI는 공개된 경기 기록과 선발투수, 타격, 불펜, 최근 흐름 등의 데이터를 종합해 예상 결과를 제공합니다.",
             },
           },
           {
@@ -208,7 +208,7 @@ export default async function AnalysisGamePage({
           {
             "@type": "ListItem",
             position: 1,
-            name: "Sports AI",
+            name: "장군 AI",
             item: BASE_URL,
           },
           {

@@ -828,7 +828,7 @@ function Content() {
       <header className="border-b border-slate-800">
         <div className="mx-auto flex max-w-6xl justify-between px-5 py-5">
           <Link href="/" className="text-2xl font-black">
-            Sports AI
+            장군 AI
           </Link>
           <Link href="/" className="text-sm font-black text-blue-400">
             ← 경기 목록

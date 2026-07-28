@@ -17,16 +17,16 @@ type Game = {
 type UnknownObject = Record<string, unknown>;
 
 export const metadata: Metadata = {
-  title: "오늘의 KBO·MLB·NPB 야구 AI 경기 분석 | Sports AI",
+  title: "오늘의 KBO·MLB·NPB 야구 AI 경기 분석 | 장군 AI",
   description:
     "오늘 열리는 KBO, MLB, NPB 경기의 선발투수, 최근 전적, 맞대결, AI 승리 확률과 예상 스코어를 한눈에 확인하세요.",
   alternates: { canonical: `${BASE_URL}/analysis` },
   openGraph: {
-    title: "오늘의 야구 AI 경기 분석 | Sports AI",
+    title: "오늘의 야구 AI 경기 분석 | 장군 AI",
     description:
       "KBO·MLB·NPB 오늘 경기의 선발, 최근 전적, 맞대결과 AI 승부예측을 확인하세요.",
     url: `${BASE_URL}/analysis`,
-    siteName: "Sports AI",
+    siteName: "장군 AI",
     type: "website",
     locale: "ko_KR",
   },

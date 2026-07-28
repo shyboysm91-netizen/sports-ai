@@ -6,7 +6,7 @@ export default function AboutPage() {
   return (
     <main className="min-h-screen bg-slate-950 px-5 py-12 text-white">
       <div className="mx-auto max-w-3xl">
-        <Link href="/" className="text-sm font-black text-blue-400">← Sports AI 홈</Link>
+        <Link href="/" className="text-sm font-black text-blue-400">← 장군 AI 홈</Link>
 
         <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-7 sm:p-10">
           <p className="text-sm font-black text-blue-400">ABOUT SPORTS AI</p>
@@ -14,7 +14,7 @@ export default function AboutPage() {
 
           <div className="mt-7 space-y-6 text-sm leading-7 text-slate-300">
             <p>
-              Sports AI는 KBO, MLB, NPB 야구 경기를 데이터 기반으로 분석하여
+              장군 AI는 KBO, MLB, NPB 야구 경기를 데이터 기반으로 분석하여
               경기 일정, 팀 성적, 선발투수 기록, 최근 경기 흐름, 맞대결, 불펜 상태,
               구종 정보 및 AI 예측 정보를 제공하는 스포츠 분석 서비스입니다.
             </p>
@@ -25,7 +25,7 @@ export default function AboutPage() {
             </p>
 
             <p>
-              Sports AI의 모든 예측과 분석 결과는 참고용 정보이며 실제 경기 결과를
+              장군 AI의 모든 예측과 분석 결과는 참고용 정보이며 실제 경기 결과를
               보장하지 않습니다. 경기 당일 선발 변경, 부상, 라인업 및 현장 상황에 따라
               실제 결과는 달라질 수 있습니다.
             </p>

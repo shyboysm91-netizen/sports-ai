@@ -42,7 +42,7 @@ export async function generateMetadata({
       title,
       description,
       url: canonical,
-      siteName: "Sports AI",
+      siteName: "장군 AI",
       type: "article",
       locale: "ko_KR",
     },

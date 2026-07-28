@@ -221,13 +221,13 @@ export default function ContentPage() {
     const text = [
       `⚾ ${data.league} ${data.away} vs ${data.home}`,
       "",
-      `Sports AI 예상: ${winner} 우세`,
+      `장군 AI 예상: ${winner} 우세`,
       `예상 스코어: ${data.awayScore} : ${data.homeScore}`,
       `홈 승리 확률: ${data.homeWinRate}%`,
       "",
       data.summary,
       "",
-      "전체 분석은 Sports AI에서 확인하세요.",
+      "전체 분석은 장군 AI에서 확인하세요.",
       `#야구 #${data.league} #야구분석 #스포츠AI #경기예측 #${data.away.replaceAll(" ", "")} #${data.home.replaceAll(" ", "")}`,
     ].join("\n");
     setCaption(text);
@@ -258,7 +258,7 @@ export default function ContentPage() {
       let hasAudio = false;
 
       const narration = narrationText.split("\n").map((line) => line.trim()).filter(Boolean);
-      while (narration.length < 6) narration.push(buildNarration(data, headline)[narration.length] || "Sports AI 분석");
+      while (narration.length < 6) narration.push(buildNarration(data, headline)[narration.length] || "장군 AI 분석");
       const audioSources: AudioBufferSourceNode[] = [];
       const totalDuration = 6 * slideSeconds;
 
@@ -379,7 +379,7 @@ export default function ContentPage() {
     if (!youtubeFile || youtubeUploading) return;
     setYoutubeUploading(true); setYoutubeProgress(0); setAutomationMessage("유튜브 업로드 준비 중입니다.");
     try {
-      const response = await fetch("/api/content/youtube/upload-session", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ title:`${data.away} vs ${data.home} Sports AI 분석`, description:caption || data.summary, privacyStatus:youtubePrivacy, mimeType:youtubeFile.type || "video/webm", size:youtubeFile.size }) });
+      const response = await fetch("/api/content/youtube/upload-session", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ title:`${data.away} vs ${data.home} 장군 AI 분석`, description:caption || data.summary, privacyStatus:youtubePrivacy, mimeType:youtubeFile.type || "video/webm", size:youtubeFile.size }) });
       const json = await response.json();
       if (!response.ok || !json.uploadUrl) throw new Error(json.message || "업로드 세션 생성 실패");
       await new Promise<void>((resolve,reject)=>{
@@ -465,7 +465,7 @@ export default function ContentPage() {
   return <main className="min-h-screen bg-slate-950 text-white">
     <header className="border-b border-slate-800 bg-slate-950">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5">
-        <div><Link href="/" className="text-2xl font-black">Sports AI</Link><p className="mt-1 text-xs font-bold text-blue-400">콘텐츠 제작</p></div>
+        <div><Link href="/" className="text-2xl font-black">장군 AI</Link><p className="mt-1 text-xs font-bold text-blue-400">콘텐츠 제작</p></div>
         <div className="flex items-center gap-2">
           <Link href="/" className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-black">← 경기 분석</Link>
           <button type="button" onClick={() => { sessionStorage.removeItem("sports-ai-owner"); setUnlocked(false); }} className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-black text-slate-400">잠금</button>
@@ -562,8 +562,8 @@ function buildNarration(d: ContentData, headline: string) {
     `선발 투수는 ${d.away} ${d.awayStarter}, 평균자책점 ${d.awayEra}, ${d.home} ${d.homeStarter}, 평균자책점 ${d.homeEra}입니다.`,
     `최근 열 경기 흐름은 ${d.away} ${d.awayRecent}, ${d.home} ${d.homeRecent}입니다.`,
     `맞대결 기록은 ${d.away} ${d.awayH2h}, ${d.home} ${d.homeH2h}입니다.`,
-    `Sports AI는 ${predicted} 우세, 예상 점수 ${d.awayScore} 대 ${d.homeScore}로 분석했습니다.`,
-    `더 자세한 분석은 Sports AI에서 확인하세요.`,
+    `장군 AI는 ${predicted} 우세, 예상 점수 ${d.awayScore} 대 ${d.homeScore}로 분석했습니다.`,
+    `더 자세한 분석은 장군 AI에서 확인하세요.`,
   ];
 }
 
@@ -649,7 +649,7 @@ function drawCard(ctx: CanvasRenderingContext2D, index: number, d: ContentData, 
     headlineText(ctx, "선발 · 최근 흐름 · 맞대결\n한 번에 확인하세요", 70, 420, 920, 78);
     ctaBox(ctx, 70, 760, 940, 180);
     ctx.fillStyle = "#8ea0b8"; ctx.font = "800 28px Arial";
-    wrap(ctx, "매일 업데이트되는 야구 분석을 Sports AI에서 확인하세요.", 70, 1040, 920, 42);
+    wrap(ctx, "매일 업데이트되는 야구 분석을 장군 AI에서 확인하세요.", 70, 1040, 920, 42);
   }
 
   drawFooter(ctx, index);

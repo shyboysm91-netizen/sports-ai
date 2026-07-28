@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "Sports AI 경기 분석";
+export const alt = "장군 AI 경기 분석";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -23,7 +23,7 @@ export default async function Image({ params }: { params: Params }) {
         <div style={{ display: "flex", alignItems: "center", gap: 32, marginTop: 48, fontSize: 64, fontWeight: 900 }}>
           <span>{away}</span><span style={{ opacity: 0.65 }}>VS</span><span>{home}</span>
         </div>
-        <div style={{ fontSize: 30, marginTop: 42, opacity: 0.8 }}>{date} · Sports AI</div>
+        <div style={{ fontSize: 30, marginTop: 42, opacity: 0.8 }}>{date} · 장군 AI</div>
       </div>
     ),
     size,

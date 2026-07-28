@@ -15,7 +15,7 @@ export async function POST() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        text: "✅ Sports AI 텔레그램 연결 테스트 성공\n\n이제 콘텐츠 관리자에서 ‘텔레그램으로 발행 승인 요청 보내기’를 사용할 수 있습니다.",
+        text: "✅ 장군 AI 텔레그램 연결 테스트 성공\n\n이제 콘텐츠 관리자에서 ‘텔레그램으로 발행 승인 요청 보내기’를 사용할 수 있습니다.",
         disable_web_page_preview: true,
       }),
     });

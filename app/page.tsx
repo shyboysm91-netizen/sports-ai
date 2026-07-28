@@ -150,7 +150,7 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
           <Link href="/" className="text-2xl font-black tracking-tight">
-            Sports AI
+            장군 AI
           </Link>
 
           <nav className="flex items-center gap-4 text-sm font-bold">
@@ -354,9 +354,9 @@ export default function Home() {
           </nav>
 
           <p className="mt-5 text-xs text-slate-600">
-            Sports AI의 분석은 참고용 정보이며 경기 결과를 보장하지 않습니다.
+            장군 AI의 분석은 참고용 정보이며 경기 결과를 보장하지 않습니다.
           </p>
-          <p className="mt-2 text-xs text-slate-600">© 2026 Sports AI</p>
+          <p className="mt-2 text-xs text-slate-600">© 2026 장군 AI</p>
         </div>
       </footer>
     </main>

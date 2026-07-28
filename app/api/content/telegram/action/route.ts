@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
   if (wantsYoutube && !approval.youtubeUrl) {
     try {
       video = video || await downloadTelegramFile(approval.telegramFileId);
-      const uploaded = await uploadYoutube(video, `${approval.title} Sports AI 분석`, approval.description, approval.mimeType || "video/mp4", approval.privacyStatus || "public");
+      const uploaded = await uploadYoutube(video, `${approval.title} 장군 AI 분석`, approval.description, approval.mimeType || "video/mp4", approval.privacyStatus || "public");
       await updateApproval(payload.approvalId, { youtubeVideoId: uploaded.videoId, youtubeUrl: uploaded.url });
       successes.push(`YouTube: ${uploaded.url}`);
     } catch (error) {

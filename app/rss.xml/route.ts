@@ -44,7 +44,7 @@ export async function GET() {
     return `<item><title>${escapeXml(title)}</title><link>${escapeXml(link)}</link><guid isPermaLink="true">${escapeXml(link)}</guid><description>${escapeXml(description)}</description><pubDate>${new Date().toUTCString()}</pubDate></item>`;
   }).join("");
 
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Sports AI 경기 분석</title><link>${BASE_URL}/analysis</link><description>KBO, MLB, NPB 오늘의 AI 야구 분석</description><language>ko-KR</language><lastBuildDate>${new Date().toUTCString()}</lastBuildDate>${items}</channel></rss>`;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>장군 AI 경기 분석</title><link>${BASE_URL}/analysis</link><description>KBO, MLB, NPB 오늘의 AI 야구 분석</description><language>ko-KR</language><lastBuildDate>${new Date().toUTCString()}</lastBuildDate>${items}</channel></rss>`;
 
   return new NextResponse(xml, { headers: { "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, s-maxage=900, stale-while-revalidate=3600" } });
 }

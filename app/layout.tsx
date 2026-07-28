@@ -8,15 +8,18 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
 
   title: {
-    default: "Sports AI | KBO · MLB · NPB AI 야구 분석",
-    template: "%s | Sports AI",
+    default: "장군 AI | KBO · MLB · NPB AI 야구 분석",
+    template: "%s | 장군 AI",
   },
 
   description:
     "KBO, MLB, NPB 경기 분석과 AI 승부예측을 제공합니다. 선발투수 비교, 최근 경기 기록, 맞대결, 불펜 피로도와 팀 전력 정보를 한눈에 확인하세요.",
 
   keywords: [
-    "Sports AI",
+    "장군 AI",
+    "장군",
+    "장군 야구분석",
+    "장군 AI 야구분석",
     "KBO 분석",
     "MLB 분석",
     "NPB 분석",
@@ -28,10 +31,10 @@ export const metadata: Metadata = {
     "야구 통계",
   ],
 
-  applicationName: "Sports AI",
-  authors: [{ name: "Sports AI" }],
-  creator: "Sports AI",
-  publisher: "Sports AI",
+  applicationName: "장군 AI",
+  authors: [{ name: "장군 AI" }],
+  creator: "장군 AI",
+  publisher: "장군 AI",
 
   alternates: {
     canonical: "/",
@@ -41,16 +44,16 @@ export const metadata: Metadata = {
     type: "website",
     locale: "ko_KR",
     url: siteUrl,
-    siteName: "Sports AI",
-    title: "Sports AI | KBO · MLB · NPB AI 야구 분석",
+    siteName: "장군 AI",
+    title: "장군 AI | KBO · MLB · NPB AI 야구 분석",
     description:
       "KBO, MLB, NPB 경기 분석, 선발투수 비교, 최근 기록, 맞대결과 AI 승부예측 정보를 확인하세요.",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Sports AI 야구 분석" }],
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "장군 AI 야구 분석" }],
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Sports AI | KBO · MLB · NPB AI 야구 분석",
+    title: "장군 AI | KBO · MLB · NPB AI 야구 분석",
     description:
       "KBO, MLB, NPB 경기 분석과 AI 승부예측 정보를 한눈에 확인하세요.",
     images: ["/opengraph-image"],
@@ -71,6 +74,29 @@ export const metadata: Metadata = {
   category: "sports",
 };
 
+const brandJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${siteUrl}/#organization`,
+      name: "장군 AI",
+      alternateName: ["장군", "장군 야구분석"],
+      url: siteUrl,
+      logo: `${siteUrl}/opengraph-image`,
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${siteUrl}/#website`,
+      url: siteUrl,
+      name: "장군 AI",
+      alternateName: "장군 야구분석",
+      inLanguage: "ko-KR",
+      publisher: { "@id": `${siteUrl}/#organization` },
+    },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -79,7 +105,11 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <head>
-        <link rel="alternate" type="application/rss+xml" title="Sports AI 경기 분석 RSS" href="/rss.xml" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(brandJsonLd) }}
+        />
+        <link rel="alternate" type="application/rss+xml" title="장군 AI 경기 분석 RSS" href="/rss.xml" />
         <meta
           name="naver-site-verification"
           content="c2a0a0d6a7e04ab4613aa0eec44375d3aba7ae1d"
