@@ -254,15 +254,52 @@ async function mlb(siteUrl: string, game: ContentGame, date: string): Promise<Re
     awayStarterId: String(awayStarterId),
     homeStarterId: String(homeStarterId),
   });
-  const data = await json(`${siteUrl}/api/mlb/analysis?${query}`);
+  // 경기 상세 페이지와 같은 standings + analysis 데이터를 사용합니다.
+  const [data, standings] = await Promise.all([
+    json(`${siteUrl}/api/mlb/analysis?${query}`),
+    json(`${siteUrl}/api/mlb/standings?season=${date.slice(0, 4)}`),
+  ]);
   const aRecent = Array.isArray(data?.awayRecent) ? data.awayRecent : [];
   const hRecent = Array.isArray(data?.homeRecent) ? data.homeRecent : [];
-  const summarize = (rows: any[]) => ({ wins: rows.filter((x) => x.result === "승").length, losses: rows.filter((x) => x.result === "패").length, draws: rows.filter((x) => x.result === "무").length, games: rows.length, averageRunsFor: rows.reduce((sum, x) => sum + n(x.runs), 0) / Math.max(1, rows.length) });
+  const summarize = (rows: any[]) => ({
+    wins: rows.slice(0, 10).filter((x) => x.result === "승").length,
+    losses: rows.slice(0, 10).filter((x) => x.result === "패").length,
+    draws: rows.slice(0, 10).filter((x) => x.result === "무").length,
+    games: rows.slice(0, 10).length,
+    averageRunsFor: rows.slice(0, 10).reduce((sum, x) => sum + n(x.runs), 0) / Math.max(1, rows.slice(0, 10).length),
+  });
   const ar = summarize(aRecent), hr = summarize(hRecent);
-  const awayPct = n(data?.awayTeam?.hitting?.ops, .7) + (5 - n(data?.awayTeam?.pitching?.era, 4)) * .03;
-  const homePct = n(data?.homeTeam?.hitting?.ops, .7) + (5 - n(data?.homeTeam?.pitching?.era, 4)) * .03;
-  const recentEdge = hr.wins - ar.wins;
-  const homeProb = Math.max(28, Math.min(72, Math.round(53 + (homePct - awayPct) * 55 + recentEdge * 1.8)));
+  const aStanding = Array.isArray(standings?.standings)
+    ? standings.standings.find((row: any) => n(row?.teamId) === awayId)
+    : undefined;
+  const hStanding = Array.isArray(standings?.standings)
+    ? standings.standings.find((row: any) => n(row?.teamId) === homeId)
+    : undefined;
+
+  // app/mlb-game/GameClient.tsx의 scoreAnalysis와 동일한 계산식입니다.
+  let awayValue = 50;
+  let homeValue = 50;
+  if (aStanding && hStanding) {
+    const difference = (n(aStanding.winningPercentage, 0.5) - n(hStanding.winningPercentage, 0.5)) * 55;
+    awayValue += difference;
+    homeValue -= difference;
+  }
+  awayValue += (ar.wins - hr.wins) * 1.6;
+  homeValue += (hr.wins - ar.wins) * 1.6;
+  const awayPitcherEra = n(data?.awayPitcher?.season?.era);
+  const homePitcherEra = n(data?.homePitcher?.season?.era);
+  if (awayPitcherEra && homePitcherEra) {
+    awayValue += (homePitcherEra - awayPitcherEra) * 2.4;
+    homeValue += (awayPitcherEra - homePitcherEra) * 2.4;
+  }
+  awayValue += (n(data?.homeBullpen?.score) - n(data?.awayBullpen?.score)) * 0.09;
+  homeValue += (n(data?.awayBullpen?.score) - n(data?.homeBullpen?.score)) * 0.09;
+  homeValue += 2.5;
+  const totalValue = Math.max(1, awayValue + homeValue);
+  const awayProb = Math.max(25, Math.min(75, Math.round((awayValue / totalValue) * 100)));
+  const homeProb = 100 - awayProb;
+  const pick = awayProb > homeProb ? game.away : game.home;
+
   const [awayScore, homeScore] = projectedScores(averageRuns(ar, 4.2), averageRuns(hr, 4.2), homeProb);
   const h2h = data?.headToHead;
   const readEra = (pitcher: any) => s(
@@ -278,7 +315,7 @@ async function mlb(siteUrl: string, game: ContentGame, date: string): Promise<Re
     awayEra, homeEra, awayRecent: formText(ar), homeRecent: formText(hr),
     awayH2h: h2h ? `${n(h2h.awayWins)}승` : "자료 없음", homeH2h: h2h ? `${n(h2h.homeWins)}승` : "자료 없음",
     awayScore: String(awayScore), homeScore: String(homeScore), homeWinRate: String(homeProb),
-    summary: `${homeProb >= 50 ? game.home : game.away} 우세입니다. 최근 10경기, 팀 타격 OPS, 팀 평균자책점, 선발 성적과 불펜 피로도를 종합 반영했습니다.`,
+    summary: `${pick} 우세입니다. 경기 상세 분석과 동일한 시즌 승률·최근 10경기·선발 평균자책점·불펜 피로도·홈 이점 계산을 그대로 반영했습니다.`,
   };
 }
 
