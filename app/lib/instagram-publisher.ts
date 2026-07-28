@@ -9,15 +9,69 @@ function env() {
   return { accessToken, accountId };
 }
 
+type InstagramApiError = {
+  message?: string;
+  type?: string;
+  code?: number | string;
+  error_subcode?: number | string;
+  error_user_title?: string;
+  error_user_msg?: string;
+  fbtrace_id?: string;
+};
+
+function safeEndpoint(rawUrl: string) {
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.searchParams.delete("access_token");
+    return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return rawUrl.replace(/access_token=[^&]+/gi, "access_token=***");
+  }
+}
+
 async function graphJson(url: string, init?: RequestInit) {
   const response = await fetch(url, { ...init, cache: "no-store" });
   const text = await response.text();
   let json: any = {};
-  try { json = text ? JSON.parse(text) : {}; } catch { json = { raw: text }; }
-  if (!response.ok || json?.error) {
-    const message = json?.error?.message || json?.error?.error_user_msg || text || `Instagram API 오류 (${response.status})`;
-    throw new Error(message);
+
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { raw: text };
   }
+
+  if (!response.ok || json?.error) {
+    const apiError: InstagramApiError = json?.error || {};
+    const mainMessage =
+      apiError.error_user_msg ||
+      apiError.message ||
+      text ||
+      `Instagram API 오류 (${response.status})`;
+
+    const details = [
+      `HTTP ${response.status}`,
+      apiError.code !== undefined ? `code ${apiError.code}` : "",
+      apiError.error_subcode !== undefined ? `subcode ${apiError.error_subcode}` : "",
+      apiError.type ? `type ${apiError.type}` : "",
+      apiError.fbtrace_id ? `trace ${apiError.fbtrace_id}` : "",
+    ].filter(Boolean);
+
+    const fullMessage = `${mainMessage}${details.length ? ` [${details.join(", ")}]` : ""}`;
+
+    // Vercel Runtime Logs에서 Meta가 반환한 실제 오류를 확인할 수 있게 남깁니다.
+    // 액세스 토큰은 출력하지 않습니다.
+    console.error("[Instagram API error]", {
+      endpoint: safeEndpoint(url),
+      method: init?.method || "GET",
+      status: response.status,
+      statusText: response.statusText,
+      error: apiError,
+      raw: json?.raw ? String(json.raw).slice(0, 1000) : undefined,
+    });
+
+    throw new Error(fullMessage);
+  }
+
   return json;
 }
 

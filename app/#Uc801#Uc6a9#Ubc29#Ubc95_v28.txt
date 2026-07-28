@@ -1,4 +1,4 @@
-장군 AI 전문가 리포트 v28 오류 수정
+Sports AI 전문가 리포트 v28 오류 수정
 
 오류 원인
 - 실제 KBO 상태 변수는 awayStarter, homeStarter인데
