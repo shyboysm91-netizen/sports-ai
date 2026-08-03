@@ -1,3 +1,5 @@
+import { getValidTikTokToken, TikTokTokenData } from "@/app/lib/tiktok-oauth";
+
 const API_BASE = "https://open.tiktokapis.com";
 
 type CreatorInfo = {
@@ -9,12 +11,6 @@ type CreatorInfo = {
   stitch_disabled?: boolean;
   max_video_post_duration_sec?: number;
 };
-
-function accessToken() {
-  const token = process.env.TIKTOK_ACCESS_TOKEN;
-  if (!token) throw new Error("TIKTOK_ACCESS_TOKEN이 필요합니다.");
-  return token;
-}
 
 async function tiktokJson(path: string, token: string, body?: object) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -66,38 +62,8 @@ async function waitForStatus(token: string, publishId: string) {
   return { status: lastStatus, publicPostId: "" };
 }
 
-export async function publishTikTokVideo(options: {
-  video: Buffer;
-  caption: string;
-}) {
-  const token = accessToken();
-  const creator = await queryCreatorInfo(token);
-  const privacyOptions = Array.isArray(creator.privacy_level_options) ? creator.privacy_level_options : [];
-  const privacyLevel = choosePrivacy(privacyOptions);
-  const size = options.video.length;
-  if (!size) throw new Error("TikTok에 올릴 영상이 비어 있습니다.");
-
-  const initialized = await tiktokJson("/v2/post/publish/video/init/", token, {
-    post_info: {
-      title: options.caption.slice(0, 2200),
-      privacy_level: privacyLevel,
-      disable_duet: Boolean(creator.duet_disabled),
-      disable_comment: Boolean(creator.comment_disabled),
-      disable_stitch: Boolean(creator.stitch_disabled),
-      video_cover_timestamp_ms: 1000,
-    },
-    source_info: {
-      source: "FILE_UPLOAD",
-      video_size: size,
-      chunk_size: size,
-      total_chunk_count: 1,
-    },
-  });
-
-  const publishId = String(initialized?.data?.publish_id || "");
-  const uploadUrl = String(initialized?.data?.upload_url || "");
-  if (!publishId || !uploadUrl) throw new Error("TikTok 업로드 주소를 받지 못했습니다.");
-
+async function uploadBytes(uploadUrl: string, video: Buffer) {
+  const size = video.length;
   const uploaded = await fetch(uploadUrl, {
     method: "PUT",
     headers: {
@@ -105,17 +71,73 @@ export async function publishTikTokVideo(options: {
       "Content-Length": String(size),
       "Content-Range": `bytes 0-${size - 1}/${size}`,
     },
-    body: new Uint8Array(options.video),
+    body: new Uint8Array(video),
   });
   if (!uploaded.ok) throw new Error(`TikTok 영상 전송 실패 (${uploaded.status}): ${await uploaded.text()}`);
+}
 
+function hasScope(token: TikTokTokenData, scope: string) {
+  return String(token.scope || "").split(",").map((value) => value.trim()).includes(scope);
+}
+
+export async function publishTikTokVideo(options: { video: Buffer; caption: string }) {
+  const tokenData = await getValidTikTokToken();
+  if (!tokenData) throw new Error("서버에 저장된 TikTok 연결 정보가 없습니다. 콘텐츠 화면에서 TikTok 계정을 연결해 주세요.");
+  const token = tokenData.access_token;
+  const size = options.video.length;
+  if (!size) throw new Error("TikTok에 올릴 영상이 비어 있습니다.");
+
+  // Direct Post(video.publish)가 승인된 앱이면 바로 게시합니다.
+  if (hasScope(tokenData, "video.publish")) {
+    const creator = await queryCreatorInfo(token);
+    const privacyOptions = Array.isArray(creator.privacy_level_options) ? creator.privacy_level_options : [];
+    const privacyLevel = choosePrivacy(privacyOptions);
+    const initialized = await tiktokJson("/v2/post/publish/video/init/", token, {
+      post_info: {
+        title: options.caption.slice(0, 2200),
+        privacy_level: privacyLevel,
+        disable_duet: Boolean(creator.duet_disabled),
+        disable_comment: Boolean(creator.comment_disabled),
+        disable_stitch: Boolean(creator.stitch_disabled),
+        video_cover_timestamp_ms: 1000,
+      },
+      source_info: { source: "FILE_UPLOAD", video_size: size, chunk_size: size, total_chunk_count: 1 },
+    });
+    const publishId = String(initialized?.data?.publish_id || "");
+    const uploadUrl = String(initialized?.data?.upload_url || "");
+    if (!publishId || !uploadUrl) throw new Error("TikTok 업로드 주소를 받지 못했습니다.");
+    await uploadBytes(uploadUrl, options.video);
+    const status = await waitForStatus(token, publishId);
+    return {
+      publishId,
+      status: status.status,
+      postId: status.publicPostId,
+      privacyLevel,
+      username: creator.creator_username || "",
+      mode: "direct" as const,
+      url: status.publicPostId ? `https://www.tiktok.com/@${creator.creator_username || "me"}/video/${status.publicPostId}` : "",
+    };
+  }
+
+  // 현재 승인된 video.upload 권한이면 TikTok 받은편지함에 초안으로 전송합니다.
+  if (!hasScope(tokenData, "video.upload")) {
+    throw new Error("TikTok 토큰에 video.upload 또는 video.publish 권한이 없습니다. TikTok 계정을 다시 연결해 주세요.");
+  }
+  const initialized = await tiktokJson("/v2/post/publish/inbox/video/init/", token, {
+    source_info: { source: "FILE_UPLOAD", video_size: size, chunk_size: size, total_chunk_count: 1 },
+  });
+  const publishId = String(initialized?.data?.publish_id || "");
+  const uploadUrl = String(initialized?.data?.upload_url || "");
+  if (!publishId || !uploadUrl) throw new Error("TikTok 초안 업로드 주소를 받지 못했습니다.");
+  await uploadBytes(uploadUrl, options.video);
   const status = await waitForStatus(token, publishId);
   return {
     publishId,
     status: status.status,
-    postId: status.publicPostId,
-    privacyLevel,
-    username: creator.creator_username || "",
-    url: status.publicPostId ? `https://www.tiktok.com/@${creator.creator_username || "me"}/video/${status.publicPostId}` : "",
+    postId: "",
+    privacyLevel: "TIKTOK_INBOX",
+    username: "",
+    mode: "draft" as const,
+    url: "",
   };
 }

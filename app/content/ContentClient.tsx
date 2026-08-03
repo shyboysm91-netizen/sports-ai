@@ -103,6 +103,8 @@ export default function ContentPage() {
   const [platforms, setPlatforms] = useState({ instagram: true, youtube: true, tiktok: true });
   const [connection, setConnection] = useState({ telegram: false, instagram: false, youtube: false, tiktok: false });
   const [youtubeConfigured, setYoutubeConfigured] = useState(false);
+  const [tiktokConfigured, setTikTokConfigured] = useState(false);
+  const [tiktokScope, setTikTokScope] = useState("");
   const [youtubeFile, setYoutubeFile] = useState<File | null>(null);
   const [youtubePrivacy, setYoutubePrivacy] = useState("public");
   const [youtubeUploading, setYoutubeUploading] = useState(false);
@@ -127,6 +129,8 @@ export default function ContentPage() {
           youtube: Boolean(json.youtube), tiktok: Boolean(json.tiktok),
         });
         setYoutubeConfigured(Boolean(json.youtubeConfigured));
+        setTikTokConfigured(Boolean(json.tiktokConfigured));
+        setTikTokScope(String(json.tiktokScope || ""));
       })
       .catch(() => undefined);
   }, []);
@@ -560,6 +564,13 @@ export default function ContentPage() {
             <input type="file" accept="video/*,.webm" onChange={(e)=>setYoutubeFile(e.target.files?.[0]||null)} className="mt-4 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm" />
             <div className="mt-3 grid grid-cols-[1fr_130px] gap-2"><select value={youtubePrivacy} onChange={(e)=>setYoutubePrivacy(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3"><option value="private">비공개</option><option value="unlisted">일부 공개</option><option value="public">공개</option></select><button type="button" onClick={uploadYoutube} disabled={!connection.youtube||!youtubeFile||youtubeUploading} className="rounded-xl bg-red-600 px-3 py-3 font-black disabled:opacity-40">{youtubeUploading?`${youtubeProgress}%`:`쇼츠 업로드`}</button></div>
             {youtubeUploading&&<div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full bg-red-500" style={{width:`${youtubeProgress}%`}} /></div>}
+          </div>
+          <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-900 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div><h3 className="font-black">틱톡 계정 연결</h3><p className="mt-1 text-xs text-slate-400">텔레그램 승인 후 TikTok으로 보내려면 계정을 한 번 연결하세요.</p></div>
+              {connection.tiktok ? <button type="button" onClick={async()=>{await fetch("/api/content/tiktok/disconnect",{method:"POST"});location.reload();}} className="rounded-lg border border-slate-600 px-3 py-2 text-xs font-bold">연결 해제</button> : tiktokConfigured ? <a href="/api/content/tiktok/auth" className="rounded-lg bg-pink-600 px-3 py-2 text-sm font-black">틱톡 계정 연결</a> : <span className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-black">키 설정 필요</span>}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-slate-400">{connection.tiktok ? (tiktokScope.includes("video.publish") ? "Direct Post 권한 연결됨 · 승인 시 자동 게시" : "video.upload 권한 연결됨 · 승인 시 TikTok 받은편지함 초안으로 전송") : "Client Key와 Client Secret을 넣고 Vercel을 재배포한 뒤 연결 버튼을 누르세요."}</p>
           </div>
           <p className="mt-3 rounded-xl bg-slate-900 p-3 text-sm leading-6 text-slate-300">{automationMessage}</p>
           <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-bold sm:grid-cols-4">

@@ -61,3 +61,13 @@ export async function readYoutubeToken(): Promise<string | null> {
   const payload = row?.payload as { encryptedToken?: string } | undefined;
   return payload?.encryptedToken || null;
 }
+
+export async function saveTikTokToken(encryptedToken: string) {
+  return writeSportsCache("content-tiktok-token", { encryptedToken }, TOKEN_TTL);
+}
+
+export async function readTikTokToken(): Promise<string | null> {
+  const row = await readSportsCache("content-tiktok-token");
+  const payload = row?.payload as { encryptedToken?: string } | undefined;
+  return payload?.encryptedToken || null;
+}
