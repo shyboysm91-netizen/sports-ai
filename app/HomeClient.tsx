@@ -82,14 +82,31 @@ function formatKoreanDate(date: string) {
   return `${year}년 ${Number(month)}월 ${Number(day)}일`;
 }
 
-export default function Home() {
+type HomeClientProps = {
+  initialGames?: BaseballGame[];
+  initialDate?: string;
+  initialError?: string;
+};
+
+export default function HomeClient({
+  initialGames = [],
+  initialDate,
+  initialError = "",
+}: HomeClientProps) {
   const [league, setLeague] = useState<League>("KBO");
-  const [selectedDate, setSelectedDate] = useState(() => getKoreaDate());
-  const [games, setGames] = useState<BaseballGame[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => initialDate || getKoreaDate());
+  const [games, setGames] = useState<BaseballGame[]>(initialGames);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(initialError);
 
   useEffect(() => {
+    const isInitialHydration =
+      league === "KBO" &&
+      selectedDate === (initialDate || getKoreaDate()) &&
+      initialGames.length > 0;
+
+    if (isInitialHydration) return;
+
     const controller = new AbortController();
 
     async function loadGames() {
@@ -336,79 +353,57 @@ export default function Home() {
         </section>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-5 pb-6">
-        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-7 md:p-10">
-          <p className="text-sm font-black tracking-widest text-blue-400">ANALYSIS GUIDE</p>
-          <h2 className="mt-3 text-2xl font-black md:text-3xl">장군 AI는 무엇을 비교하나요?</h2>
-          <p className="mt-4 max-w-4xl leading-8 text-slate-300">
-            장군 AI는 단순한 승패 표시가 아니라 선발투수의 시즌 성적과 최근 등판 흐름,
-            팀 타선의 최근 득점력, 상대전적, 홈·원정 차이, 불펜 투구량과 연투 여부를 함께
-            비교합니다. 서로 다른 지표가 같은 방향을 가리키는지 확인한 뒤 경기별 핵심 변수를
-            정리하며, 제공되는 확률과 예상 점수는 참고용 분석 결과입니다.
-          </p>
-
-          <div className="mt-7 grid gap-4 md:grid-cols-3">
-            <article className="rounded-2xl bg-slate-950 p-5">
-              <h3 className="font-black">선발투수 분석</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-400">
-                평균자책점, 이닝, WHIP, 볼넷과 탈삼진뿐 아니라 최근 등판 내용과 상대 팀 기록을 함께 확인합니다.
-              </p>
-            </article>
-            <article className="rounded-2xl bg-slate-950 p-5">
-              <h3 className="font-black">타선과 상대전적</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-400">
-                최근 득점 흐름, 장타 생산력, 좌우 투수 대응과 최근 맞대결 결과를 같은 기준으로 비교합니다.
-              </p>
-            </article>
-            <article className="rounded-2xl bg-slate-950 p-5">
-              <h3 className="font-black">불펜 피로도</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-400">
-                전날과 최근 3일의 투구량, 연속 등판 여부를 반영해 경기 후반 운영 부담을 살펴봅니다.
-              </p>
-            </article>
-          </div>
+      <section className="mx-auto max-w-6xl px-5 pb-4">
+        <div className="grid gap-5 md:grid-cols-3">
+          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="text-xl font-black">선발투수는 이렇게 비교합니다</h2>
+            <p className="mt-3 text-sm leading-7 text-slate-400">
+              시즌 평균자책점만 보지 않고 WHIP, 이닝 소화력, 볼넷과 탈삼진, 최근 등판 내용,
+              홈·원정 성적과 상대 팀 전적을 함께 확인합니다. 같은 평균자책점이라도 최근 투구 수와
+              제구 흐름에 따라 실제 경기 영향은 달라질 수 있습니다.
+            </p>
+          </article>
+          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="text-xl font-black">불펜 피로도를 반영하는 이유</h2>
+            <p className="mt-3 text-sm leading-7 text-slate-400">
+              야구는 선발투수만으로 끝나지 않습니다. 최근 3일 등판 횟수, 전날 투구 수, 연투 여부와
+              소화 이닝을 바탕으로 후반 운영 여력을 살펴봅니다. 접전 경기에서는 불펜 상태가 승부를
+              바꾸는 핵심 변수가 될 수 있습니다.
+            </p>
+          </article>
+          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="text-xl font-black">AI 예측은 참고 자료입니다</h2>
+            <p className="mt-3 text-sm leading-7 text-slate-400">
+              팀 타격 흐름, 선발과 불펜, 최근 맞대결, 구장과 일정 데이터를 종합해 승리 확률과 예상
+              점수를 계산합니다. 예측은 확정 결과가 아니며, 갑작스러운 선발 변경과 결장 등 경기 직전
+              변수에 따라 달라질 수 있습니다.
+            </p>
+          </article>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Link href="/guide/how-it-works" className="rounded-2xl border border-slate-800 bg-slate-900 p-5 hover:border-blue-500">
-            <p className="text-xs font-black text-blue-400">분석 방법</p>
-            <h3 className="mt-2 font-black">AI 야구 분석 기준</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-500">승률과 예상 점수가 만들어지는 과정을 설명합니다.</p>
-          </Link>
-          <Link href="/guide/whip" className="rounded-2xl border border-slate-800 bg-slate-900 p-5 hover:border-blue-500">
-            <p className="text-xs font-black text-blue-400">투수 지표</p>
-            <h3 className="mt-2 font-black">WHIP 보는 법</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-500">출루 허용 능력을 판단할 때 무엇을 봐야 하는지 정리합니다.</p>
-          </Link>
-          <Link href="/guide/ops" className="rounded-2xl border border-slate-800 bg-slate-900 p-5 hover:border-blue-500">
-            <p className="text-xs font-black text-blue-400">타격 지표</p>
-            <h3 className="mt-2 font-black">OPS 이해하기</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-500">출루율과 장타율을 함께 보는 이유를 설명합니다.</p>
-          </Link>
-          <Link href="/guide/bullpen-fatigue" className="rounded-2xl border border-slate-800 bg-slate-900 p-5 hover:border-blue-500">
-            <p className="text-xs font-black text-blue-400">경기 후반</p>
-            <h3 className="mt-2 font-black">불펜 피로도 기준</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-500">투구 수와 연투가 경기 후반에 미치는 영향을 정리합니다.</p>
-          </Link>
-        </div>
-
-        <section className="mt-6 rounded-3xl border border-slate-800 bg-slate-900 p-7 md:p-10">
-          <h2 className="text-2xl font-black">자주 묻는 질문</h2>
-          <div className="mt-6 space-y-6 text-sm leading-7 text-slate-300">
-            <div>
-              <h3 className="font-black text-white">예측 결과는 경기 전에 바뀔 수 있나요?</h3>
-              <p className="mt-2">예고 선발, 라인업, 부상 정보와 최신 경기 데이터가 갱신되면 분석 결과도 달라질 수 있습니다.</p>
-            </div>
-            <div>
-              <h3 className="font-black text-white">승률이 높은 팀이 반드시 이기나요?</h3>
-              <p className="mt-2">아닙니다. 승률은 여러 기록을 비교한 참고 수치이며 실제 경기에는 수비 실책, 교체 운용, 날씨 등 예상하기 어려운 변수가 있습니다.</p>
-            </div>
-            <div>
-              <h3 className="font-black text-white">경기 정보가 늦게 표시되는 이유는 무엇인가요?</h3>
-              <p className="mt-2">공식 일정이나 예고 선발이 아직 발표되지 않았거나 외부 데이터 제공이 지연되는 경우 일부 항목이 미정으로 표시될 수 있습니다.</p>
-            </div>
+        <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-6 md:p-8">
+          <h2 className="text-2xl font-black">장군 AI 경기 분석 이용 안내</h2>
+          <div className="mt-4 grid gap-5 text-sm leading-7 text-slate-400 md:grid-cols-2">
+            <p>
+              경기 카드를 선택하면 선발투수 비교, 최근 경기 기록, 팀 타격 흐름, 맞대결, 홈·원정 성적,
+              불펜 피로도와 종합 예측을 확인할 수 있습니다. 단순 승패 숫자만 제시하지 않고 예측에
+              사용된 근거를 함께 보여주는 것을 목표로 합니다.
+            </p>
+            <p>
+              공식 일정과 선발 정보는 발표 시점에 따라 변경될 수 있습니다. 경기 시작 전 최신 정보를
+              다시 확인해 주세요. 모든 분석은 스포츠 정보 제공을 위한 참고 자료이며 금전적 판단이나
+              결과를 보장하지 않습니다.
+            </p>
           </div>
-        </section>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/analysis" className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-black hover:bg-blue-500">
+              전체 경기 분석 보기
+            </Link>
+            <Link href="/about" className="rounded-xl border border-slate-700 px-5 py-3 text-sm font-black text-slate-300 hover:border-slate-500">
+              분석 기준 자세히 보기
+            </Link>
+          </div>
+        </div>
       </section>
 
       <footer className="mt-16 border-t border-slate-800">
@@ -416,9 +411,6 @@ export default function Home() {
           <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm font-bold text-slate-400">
             <Link href="/about" className="hover:text-white">
               사이트 소개
-            </Link>
-            <Link href="/guide/how-it-works" className="hover:text-white">
-              분석 기준
             </Link>
             <Link href="/privacy" className="hover:text-white">
               개인정보처리방침

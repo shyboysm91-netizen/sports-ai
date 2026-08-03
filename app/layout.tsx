@@ -75,29 +75,6 @@ export const metadata: Metadata = {
   category: "sports",
 };
 
-const brandJsonLd = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "Organization",
-      "@id": `${siteUrl}/#organization`,
-      name: "장군 AI",
-      alternateName: ["장군", "장군 야구분석"],
-      url: siteUrl,
-      logo: `${siteUrl}/opengraph-image`,
-    },
-    {
-      "@type": "WebSite",
-      "@id": `${siteUrl}/#website`,
-      url: siteUrl,
-      name: "장군 AI",
-      alternateName: "장군 야구분석",
-      inLanguage: "ko-KR",
-      publisher: { "@id": `${siteUrl}/#organization` },
-    },
-  ],
-};
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -106,10 +83,6 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <head>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(brandJsonLd) }}
-        />
         <link rel="alternate" type="application/rss+xml" title="장군 AI 경기 분석 RSS" href="/rss.xml" />
         <meta
           name="naver-site-verification"

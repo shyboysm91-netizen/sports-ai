@@ -14,6 +14,10 @@ const PAGES = [
   ["/contact", "yearly", "0.5"],
   ["/privacy", "yearly", "0.4"],
   ["/terms", "yearly", "0.4"],
+  ["/guide/how-it-works", "monthly", "0.8"],
+  ["/guide/whip", "monthly", "0.7"],
+  ["/guide/ops", "monthly", "0.7"],
+  ["/guide/bullpen-fatigue", "monthly", "0.7"],
 ] as const;
 
 function xmlEscape(value: string) {
