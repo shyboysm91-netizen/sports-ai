@@ -700,6 +700,25 @@ function paintBackground(ctx: CanvasRenderingContext2D, w: number, h: number, in
 function drawHeader(ctx: CanvasRenderingContext2D, d: ContentData, index: number) {
   ctx.fillStyle = "#ffffff"; ctx.font = "900 28px Arial"; ctx.fillText(d.league, 70, 92);
   ctx.fillStyle = "#8ea0b8"; ctx.font = "800 25px Arial"; ctx.textAlign = "right"; ctx.fillText(d.date, 1010, 92);
+
+  // 첫 장에서만 새 도메인을 상단 중앙에 크게 노출합니다.
+  if (index === 0) {
+    const badgeX = 350;
+    const badgeY = 48;
+    const badgeW = 380;
+    const badgeH = 64;
+    const gradient = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH);
+    gradient.addColorStop(0, "#2563eb");
+    gradient.addColorStop(1, "#7c3aed");
+    ctx.fillStyle = gradient;
+    round(ctx, badgeX, badgeY, badgeW, badgeH, 32);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 36px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("장군분석.kr", 540, 91);
+  }
+
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fillRect(70, 125, 940, 2);
   ctx.fillStyle = "#8ea0b8"; ctx.font = "800 22px Arial"; ctx.fillText(`${index + 1} / 6`, 70, 168);

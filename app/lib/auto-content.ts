@@ -27,9 +27,12 @@ function wrap(text: string, max = 18) {
   for (const ch of chars) { line += ch; if (line.length >= max) { lines.push(line); line = ""; } }
   if (line) lines.push(line); return lines.slice(0, 3);
 }
-function slideSvg(title: string, lines: string[], footer: string) {
+function slideSvg(title: string, lines: string[], footer: string, isFirstSlide = false) {
   const text = lines.flatMap((line, i) => wrap(line).map((part, j) => `<text x="540" y="${700 + (i * 150) + (j * 72)}" text-anchor="middle" fill="#f8fafc" font-size="58" font-weight="700">${safe(part)}</text>`)).join("");
-  return `<svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#07111f"/><stop offset="1" stop-color="#101827"/></linearGradient></defs><rect width="1080" height="1920" fill="url(#g)"/><circle cx="540" cy="310" r="120" fill="#162b4d"/><text x="540" y="350" text-anchor="middle" font-size="110">⚾</text><text x="540" y="540" text-anchor="middle" fill="#60a5fa" font-size="66" font-weight="800">${safe(title)}</text>${text}<rect x="90" y="1710" width="900" height="2" fill="#334155"/><text x="540" y="1790" text-anchor="middle" fill="#94a3b8" font-size="34">${safe(footer)}</text><text x="540" y="1848" text-anchor="middle" fill="#f8fafc" font-size="34" font-weight="800">장군분석.kr</text></svg>`;
+  const topBrand = isFirstSlide
+    ? `<defs><linearGradient id="brand" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs><rect x="310" y="70" width="460" height="88" rx="44" fill="url(#brand)"/><text x="540" y="127" text-anchor="middle" fill="#ffffff" font-size="48" font-weight="900">장군분석.kr</text>`
+    : "";
+  return `<svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#07111f"/><stop offset="1" stop-color="#101827"/></linearGradient></defs><rect width="1080" height="1920" fill="url(#g)"/>${topBrand}<circle cx="540" cy="310" r="120" fill="#162b4d"/><text x="540" y="350" text-anchor="middle" font-size="110">⚾</text><text x="540" y="540" text-anchor="middle" fill="#60a5fa" font-size="66" font-weight="800">${safe(title)}</text>${text}<rect x="90" y="1710" width="900" height="2" fill="#334155"/><text x="540" y="1790" text-anchor="middle" fill="#94a3b8" font-size="34">${safe(footer)}</text><text x="540" y="1848" text-anchor="middle" fill="#f8fafc" font-size="34" font-weight="800">장군분석.kr</text></svg>`;
 }
 function sign(value: string, secret: string) { return createHmac("sha256", secret).update(value).digest("base64url"); }
 function encode(value: object) { return Buffer.from(JSON.stringify(value), "utf8").toString("base64url"); }
@@ -49,7 +52,7 @@ async function renderVideo(game: Game, league: ContentLeague, date: string, site
   const analysis = await loadReelAnalysis(siteUrl, league, game, date);
   const predicted = Number(analysis.homeWinRate) >= 50 ? home : away;
   const slides = [
-    ["오늘의 핵심 경기", [`${away} vs ${home}`, `${league} ${date}`, "장군분석.kr"]],
+    ["오늘의 핵심 경기", [`${away} vs ${home}`, `${league} ${date}`]],
     ["선발투수 비교", [`${away}: ${a} · ERA ${analysis.awayEra}`, `${home}: ${h} · ERA ${analysis.homeEra}`]],
     ["최근 10경기", [`${away}: ${analysis.awayRecent}`, `${home}: ${analysis.homeRecent}`]],
     ["최근 맞대결", [`${away}: ${analysis.awayH2h}`, `${home}: ${analysis.homeH2h}`]],
@@ -60,7 +63,7 @@ async function renderVideo(game: Game, league: ContentLeague, date: string, site
   const concat: string[] = [];
   for (let i = 0; i < slides.length; i++) {
     const png = path.join(dir, `slide-${i}.png`);
-    await sharp(Buffer.from(slideSvg(slides[i][0] as string, slides[i][1] as string[], `${away} vs ${home}`))).png().toFile(png);
+    await sharp(Buffer.from(slideSvg(slides[i][0] as string, slides[i][1] as string[], `${away} vs ${home}`, i === 0))).png().toFile(png);
     concat.push(`file '${png.replaceAll("'", "'\\''")}'`, `duration 2.5`);
   }
   concat.push(`file '${path.join(dir, `slide-${slides.length - 1}.png`).replaceAll("'", "'\\''")}'`);
