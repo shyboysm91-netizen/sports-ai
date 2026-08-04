@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-static";
 export const revalidate = 3600;
 
-const BASE_URL = "https://sports-ai-alpha.vercel.app";
+const BASE_URL = "https://장군분석.kr";
 
 function escapeXml(value: string) {
   return value

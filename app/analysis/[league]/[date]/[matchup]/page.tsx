@@ -6,7 +6,7 @@ import MlbGameClient from "../../../../mlb-game/GameClient";
 import NpbGameClient from "../../../../npb-game/GameClient";
 import { matchupSlug, teamNameFromSlug } from "../../../../lib/analysis-slug";
 
-const BASE_URL = "https://sports-ai-alpha.vercel.app";
+const BASE_URL = "https://장군분석.kr";
 
 type RouteParams = Promise<{
   league: string;

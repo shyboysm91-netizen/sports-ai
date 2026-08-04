@@ -4,7 +4,7 @@ import KboGameClient from "../../../../../game/GameClient";
 import MlbGameClient from "../../../../../mlb-game/GameClient";
 import NpbGameClient from "../../../../../npb-game/GameClient";
 
-const BASE_URL = "https://sports-ai-alpha.vercel.app";
+const BASE_URL = "https://장군분석.kr";
 type Params = Promise<{ league: string; date: string; matchup: string }>;
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 const first = (v: string | string[] | undefined) => Array.isArray(v) ? v[0] ?? "" : v ?? "";

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const DEFAULT_SITE_URL = "https://sports-ai-alpha.vercel.app";
+const DEFAULT_SITE_URL = "https://장군분석.kr";
 const INDEXNOW_ENDPOINT = "https://api.indexnow.org/indexnow";
 const MAX_ATTEMPTS = 3;
 

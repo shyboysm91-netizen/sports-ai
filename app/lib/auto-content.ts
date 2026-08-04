@@ -29,7 +29,7 @@ function wrap(text: string, max = 18) {
 }
 function slideSvg(title: string, lines: string[], footer: string) {
   const text = lines.flatMap((line, i) => wrap(line).map((part, j) => `<text x="540" y="${700 + (i * 150) + (j * 72)}" text-anchor="middle" fill="#f8fafc" font-size="58" font-weight="700">${safe(part)}</text>`)).join("");
-  return `<svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#07111f"/><stop offset="1" stop-color="#101827"/></linearGradient></defs><rect width="1080" height="1920" fill="url(#g)"/><circle cx="540" cy="310" r="120" fill="#162b4d"/><text x="540" y="350" text-anchor="middle" font-size="110">⚾</text><text x="540" y="540" text-anchor="middle" fill="#60a5fa" font-size="66" font-weight="800">${safe(title)}</text>${text}<rect x="90" y="1710" width="900" height="2" fill="#334155"/><text x="540" y="1790" text-anchor="middle" fill="#94a3b8" font-size="34">${safe(footer)}</text><text x="540" y="1848" text-anchor="middle" fill="#64748b" font-size="28">장군 AI 자동 분석</text></svg>`;
+  return `<svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#07111f"/><stop offset="1" stop-color="#101827"/></linearGradient></defs><rect width="1080" height="1920" fill="url(#g)"/><circle cx="540" cy="310" r="120" fill="#162b4d"/><text x="540" y="350" text-anchor="middle" font-size="110">⚾</text><text x="540" y="540" text-anchor="middle" fill="#60a5fa" font-size="66" font-weight="800">${safe(title)}</text>${text}<rect x="90" y="1710" width="900" height="2" fill="#334155"/><text x="540" y="1790" text-anchor="middle" fill="#94a3b8" font-size="34">${safe(footer)}</text><text x="540" y="1848" text-anchor="middle" fill="#f8fafc" font-size="34" font-weight="800">장군분석.kr</text></svg>`;
 }
 function sign(value: string, secret: string) { return createHmac("sha256", secret).update(value).digest("base64url"); }
 function encode(value: object) { return Buffer.from(JSON.stringify(value), "utf8").toString("base64url"); }
@@ -49,12 +49,12 @@ async function renderVideo(game: Game, league: ContentLeague, date: string, site
   const analysis = await loadReelAnalysis(siteUrl, league, game, date);
   const predicted = Number(analysis.homeWinRate) >= 50 ? home : away;
   const slides = [
-    ["오늘의 핵심 경기", [`${away} vs ${home}`, `${league} ${date}`]],
+    ["오늘의 핵심 경기", [`${away} vs ${home}`, `${league} ${date}`, "장군분석.kr"]],
     ["선발투수 비교", [`${away}: ${a} · ERA ${analysis.awayEra}`, `${home}: ${h} · ERA ${analysis.homeEra}`]],
     ["최근 10경기", [`${away}: ${analysis.awayRecent}`, `${home}: ${analysis.homeRecent}`]],
     ["최근 맞대결", [`${away}: ${analysis.awayH2h}`, `${home}: ${analysis.homeH2h}`]],
     ["AI 최종 예측", [`${predicted} 우세 · ${analysis.homeWinRate}%`, `예상 점수 ${analysis.awayScore} : ${analysis.homeScore}`]],
-    ["핵심 분석", [analysis.summary, "텔레그램에서 확인 후 발행하세요"]],
+    ["전체 분석 확인", [analysis.summary, "무료 AI 야구분석", "장군분석.kr"]],
   ];
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sports-ai-auto-"));
   const concat: string[] = [];
@@ -65,7 +65,7 @@ async function renderVideo(game: Game, league: ContentLeague, date: string, site
   }
   concat.push(`file '${path.join(dir, `slide-${slides.length - 1}.png`).replaceAll("'", "'\\''")}'`);
   const list = path.join(dir, "slides.txt"); await fs.writeFile(list, concat.join("\n"));
-  const narration = `${league} ${away} 대 ${home}. 원정 선발 ${a}, 평균자책점 ${analysis.awayEra}. 홈 선발 ${h}, 평균자책점 ${analysis.homeEra}. 최근 열 경기 흐름은 ${away} ${analysis.awayRecent}, ${home} ${analysis.homeRecent}. 장군 AI는 ${predicted} 우세, 예상 점수 ${analysis.awayScore} 대 ${analysis.homeScore}로 분석했습니다.`;
+  const narration = `${league} ${away} 대 ${home}. 원정 선발 ${a}, 평균자책점 ${analysis.awayEra}. 홈 선발 ${h}, 평균자책점 ${analysis.homeEra}. 최근 열 경기 흐름은 ${away} ${analysis.awayRecent}, ${home} ${analysis.homeRecent}. AI 분석 결과 ${predicted} 우세, 예상 점수 ${analysis.awayScore} 대 ${analysis.homeScore}입니다. 더 자세한 분석은 장군분석.kr에서 확인하세요.`;
   const audio = path.join(dir, "voice.mp3"); const hasAudio = await synthesize(narration, audio);
   const output = path.join(dir, "sports-ai-auto.mp4");
   const args = ["-y", "-f", "concat", "-safe", "0", "-i", list];
@@ -97,7 +97,7 @@ export async function runAutomaticContent(siteUrl: string): Promise<AutoResult[]
       try {
         const buffer = await fs.readFile(output); const approvalId = randomUUID();
         const title = `${game.away || "원정팀"} vs ${game.home || "홈팀"}`;
-        const caption = `⚾ ${league} ${title}\n\n${narration}\n\n#야구 #${league} #야구분석 #스포츠AI #경기예측`;
+        const caption = `⚾ ${league} ${title}\n\n${narration}\n\n#야구 #${league} #야구분석 #장군분석 #경기예측`;
         const platforms = ["youtube", "instagram", "tiktok"];
         const payload = encode({ approvalId, league, date, away: game.away, home: game.home, title, platforms, exp: Date.now() + 24 * 60 * 60 * 1000 });
         const token = `${payload}.${sign(payload, secret)}`;

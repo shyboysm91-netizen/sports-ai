@@ -4,7 +4,7 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const BASE_URL = "https://sports-ai-alpha.vercel.app";
+const BASE_URL = "https://장군분석.kr";
 
 type League = "kbo" | "mlb" | "npb";
 type Game = {

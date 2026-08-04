@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     };
 
     const summary = [
-      "🎬 장군 AI 콘텐츠 발행 승인",
+      "🎬 장군분석.kr 콘텐츠 발행 승인",
       "",
       `리그: ${body.league || "-"}`,
       `날짜: ${body.date || "-"}`,

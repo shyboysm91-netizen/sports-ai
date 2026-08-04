@@ -47,7 +47,7 @@ export default async function YoutubeSetupPage() {
             <div className="rounded-xl bg-slate-950 p-4"><b>YOUTUBE_CLIENT_ID</b><br/><span className="text-slate-500">Google Cloud에서 만든 웹 애플리케이션 OAuth 클라이언트 ID</span></div>
             <div className="rounded-xl bg-slate-950 p-4"><b>YOUTUBE_CLIENT_SECRET</b><br/><span className="text-slate-500">같은 OAuth 클라이언트의 보안 비밀</span></div>
             <div className="rounded-xl bg-slate-950 p-4"><b>YOUTUBE_TOKEN_SECRET</b><br/><span className="text-slate-500">임의의 긴 문자열. 유튜브 토큰 쿠키를 암호화하는 데 사용합니다.</span></div>
-            <div className="rounded-xl bg-slate-950 p-4"><b>NEXT_PUBLIC_SITE_URL</b><br/><span className="text-slate-500">배포 후에는 https://sports-ai-alpha.vercel.app</span></div>
+            <div className="rounded-xl bg-slate-950 p-4"><b>NEXT_PUBLIC_SITE_URL</b><br/><span className="text-slate-500">배포 후에는 https://장군분석.kr</span></div>
           </div>
           <p className="mt-4 rounded-xl bg-slate-950 p-4 text-sm leading-6 text-slate-400">로컬에서만 시험할 때는 Google Cloud에 localhost 리디렉션 URI도 별도로 등록해야 합니다. 실제 텔레그램 승인과 안정적인 계정 연결은 Vercel 배포 후 진행하는 편이 안전합니다.</p>
         </section>

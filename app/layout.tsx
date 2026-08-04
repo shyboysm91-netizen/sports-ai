@@ -3,7 +3,7 @@ import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
 import "./globals.css";
 
-const siteUrl = "https://sports-ai-alpha.vercel.app";
+const siteUrl = "https://장군분석.kr";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

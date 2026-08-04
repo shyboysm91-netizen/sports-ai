@@ -17,7 +17,7 @@ http://localhost:3000/content
 [텔레그램 기능에 필요한 환경변수]
 TELEGRAM_BOT_TOKEN=BotFather가 발급한 토큰
 TELEGRAM_CHAT_ID=내 텔레그램 채팅 ID
-NEXT_PUBLIC_SITE_URL=https://sports-ai-alpha.vercel.app
+NEXT_PUBLIC_SITE_URL=https://장군분석.kr
 CONTENT_APPROVAL_SECRET=길고 임의의 비밀문자열
 
 주의: 텔레그램에서 승인 버튼을 누르려면 외부에서 접속 가능한 주소가 필요하므로 Vercel 배포 후 작동합니다. localhost 주소는 텔레그램에서 열 수 없습니다.
@@ -36,7 +36,7 @@ YOUTUBE_TOKEN_SECRET=32자 이상의 임의 문자열
 
 Google Cloud OAuth 승인된 리디렉션 URI:
 로컬: http://localhost:3000/api/content/youtube/callback
-배포: https://sports-ai-alpha.vercel.app/api/content/youtube/callback
+배포: https://장군분석.kr/api/content/youtube/callback
 
 사용 순서:
 1. /content에서 유튜브 계정 연결

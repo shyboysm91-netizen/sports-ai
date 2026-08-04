@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import GameClient from "./GameClient";
 
-const BASE_URL = "https://sports-ai-alpha.vercel.app";
+const BASE_URL = "https://장군분석.kr";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
