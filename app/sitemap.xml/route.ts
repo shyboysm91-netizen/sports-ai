@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-static";
 export const revalidate = 3600;
 
-const BASE_URL = "https://xn--6e0by81a7uc94i.kr";
+const BASE_URL = "https://장군분석.kr";
 
 function escapeXml(value: string) {
   return value

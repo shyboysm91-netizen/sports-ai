@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const BASE_URL = "https://xn--6e0by81a7uc94i.kr";
+const BASE_URL = "https://장군분석.kr";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -12,5 +12,6 @@ export default function robots(): MetadataRoute.Robots {
       },
     ],
     sitemap: `${BASE_URL}/sitemap.xml`,
+    host: BASE_URL,
   };
 }

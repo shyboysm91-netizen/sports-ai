@@ -113,7 +113,7 @@ export default function RootLayout({
         <link rel="alternate" type="application/rss+xml" title="장군 AI 경기 분석 RSS" href="/rss.xml" />
         <meta
           name="naver-site-verification"
-          content="c2a0a0d6a7e04ab4613aa0eec44375d3aba7ae1d"
+          content="f641b1723e56622a70a6e827f2e80dd133b8a0d5"
         />
         <script
           async

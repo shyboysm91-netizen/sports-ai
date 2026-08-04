@@ -4,7 +4,7 @@ import { matchupSlug, type AnalysisLeague } from "../../lib/analysis-slug";
 export const dynamic = "force-dynamic";
 export const revalidate = 900;
 
-const BASE_URL = "https://xn--6e0by81a7uc94i.kr";
+const BASE_URL = "https://장군분석.kr";
 type Game = { date: string; away: string; home: string };
 type UnknownObject = Record<string, unknown>;
 
