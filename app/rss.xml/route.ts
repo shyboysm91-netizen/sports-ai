@@ -40,7 +40,7 @@ export async function GET() {
     const league = (game.league || "KBO").toLowerCase();
     const link = `${BASE_URL}/analysis/${league}/${date}/${slug(away)}-vs-${slug(home)}`;
     const title = `${away} vs ${home} ${game.league || ""} AI 분석`;
-    const description = `${date} ${away} vs ${home} 선발투수, 최근 기록, 맞대결과 AI 승부예측.`;
+    const description = `${date} ${away} vs ${home} 선발투수, 최근 기록, 맞대결과 데이터 분석.`;
     return `<item><title>${escapeXml(title)}</title><link>${escapeXml(link)}</link><guid isPermaLink="true">${escapeXml(link)}</guid><description>${escapeXml(description)}</description><pubDate>${new Date().toUTCString()}</pubDate></item>`;
   }).join("");
 

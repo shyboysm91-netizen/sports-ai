@@ -29,7 +29,7 @@ export async function generateMetadata({
   const date = valueOf(params.date, "");
   const matchup = `${away} vs ${home}`;
   const dateText = date ? ` ${date}` : "";
-  const title = `${matchup}${dateText} MLB AI 분석 및 승부예측`;
+  const title = `${matchup}${dateText} MLB 경기 데이터 분석`;
   const description = `${matchup} MLB 경기의 선발투수, 최근 10경기, 불펜 피로도, 맞대결, 구종 분석과 AI 승리 확률 및 예상 스코어를 확인하세요.`;
   const query = canonicalQuery(params);
   const canonical = `${BASE_URL}/mlb-game${query ? `?${query}` : ""}`;

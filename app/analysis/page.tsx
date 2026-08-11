@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "오늘의 야구 AI 경기 분석 | 장군 AI",
     description:
-      "KBO·MLB·NPB 오늘 경기의 선발, 최근 전적, 맞대결과 AI 승부예측을 확인하세요.",
+      "KBO·MLB·NPB 오늘 경기의 선발, 최근 전적, 맞대결과 데이터 분석을 확인하세요.",
     url: `${BASE_URL}/analysis`,
     siteName: "장군 AI",
     type: "website",
@@ -163,7 +163,7 @@ export default async function AnalysisIndexPage() {
 
       <h1 style={{ marginBottom: 8 }}>오늘의 야구 AI 경기 분석</h1>
       <p style={{ marginTop: 0, color: "#555", lineHeight: 1.65 }}>
-        KBO·MLB·NPB 경기별 선발투수, 최근 전적, 맞대결과 AI 승부예측을
+        KBO·MLB·NPB 경기별 선발투수, 최근 전적, 맞대결과 데이터 분석을
         확인하세요.
       </p>
 

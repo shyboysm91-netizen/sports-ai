@@ -1,20 +1,34 @@
 import { NextResponse } from "next/server";
-import { findTeam, inningsToOuts, num, outsToInnings, playerNameKo, tableRows } from "../_shared";
+import { cleanHtml, findTeam, inningsToOuts, num, outsToInnings, playerNameKo, tableRows } from "../_shared";
 type Pitcher={name:string;originalName:string;playerCode:string;games:number;wins:number;losses:number;saves:number;holds:number;inningsOuts:number;hits:number;homeRuns:number;walks:number;hitByPitch:number;strikeouts:number;runs:number;earnedRuns:number;era:number};
 export const revalidate=21600;
 export async function GET(request:Request){
  const q=new URL(request.url).searchParams,teamName=q.get("team")??"",season=/^\d{4}$/.test(q.get("season")??"")?q.get("season")!:String(new Date().getFullYear()),team=findTeam(teamName);
  if(!team)return NextResponse.json({success:false,message:"NPB 팀을 찾지 못했습니다."},{status:400,headers:{"Cache-Control":"no-store"}});
  try{
-  const response=await fetch(`https://npb.jp/bis/eng/${season}/stats/idp1_${team.code}.html`,{headers:{"User-Agent":"Mozilla/5.0",Accept:"text/html"},next:{revalidate:21600}}); if(!response.ok)throw new Error(`NPB 투수 기록 요청 실패: ${response.status}`);
+  const [response,rosterResponse]=await Promise.all([
+   fetch(`https://npb.jp/bis/eng/${season}/stats/idp1_${team.code}.html`,{headers:{"User-Agent":"Mozilla/5.0",Accept:"text/html"},next:{revalidate:21600}}),
+   fetch(`https://npb.jp/bis/eng/teams/rst_${team.code}.html`,{headers:{"User-Agent":"Mozilla/5.0",Accept:"text/html"},next:{revalidate:21600}}),
+  ]); if(!response.ok)throw new Error(`NPB 투수 기록 요청 실패: ${response.status}`);
   const players:Pitcher[]=[];
   const html = await response.text();
+  const rosterHtml=rosterResponse.ok?await rosterResponse.text():"";
+  const rosterCodes=new Map<string,string>();
+  for(const match of rosterHtml.matchAll(/<a\b[^>]*href=["'][^"']*\/players\/(\d+)\.html[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)){
+   const label=cleanHtml(match[2]).toLowerCase().replace(/[^a-z0-9]/g,"");
+   if(label)rosterCodes.set(label,match[1]);
+  }
   const rawRows = html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) ?? [];
   for(const rawRow of rawRows){
    const row = (rawRow.match(/<t[dh]\b[^>]*>[\s\S]*?<\/t[dh]>/gi) ?? []).map((cell) => cell.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/&#39;/gi, "'").replace(/&quot;/gi, '"').replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
-   const playerCode = rawRow.match(/\/(?:bis\/)?(?:eng\/)?players\/(\d+)\.html/i)?.[1] || "";
+   // NPB 페이지는 시즌/언어에 따라 선수 링크 경로가 달라진다.
+   // 경로 전체를 고정하지 않고 행 안의 선수 프로필 HTML 파일 번호를 읽는다.
+   let playerCode = rawRow.match(/href=["'][^"']*?(?:players\/)?(\d{6,})\.html(?:[?#][^"']*)?["']/i)?.[1]
+     || rawRow.match(/(?:players\/|\/)(\d{6,})\.html/i)?.[1]
+     || "";
    const nameIndex=row.findIndex((cell,i)=>i<4&&/,/.test(cell)&&/[A-Za-z]/.test(cell)); if(nameIndex<0)continue;
    const originalName=row[nameIndex].replace(/^[*+]/,"").trim();
+   playerCode ||= rosterCodes.get(originalName.toLowerCase().replace(/[^a-z0-9]/g,"")) || "";
    const s=row.slice(nameIndex+1).map((v)=>v.trim()).filter((v)=>v!=="");
    // 팀별 투수 표는 선수/팀에 따라 보조 열 수가 달라질 수 있다.
    // 23개 고정 조건을 없애고 공식 표의 끝쪽 ERA·실점·자책점과 앞쪽 기본 기록을 기준으로 읽는다.

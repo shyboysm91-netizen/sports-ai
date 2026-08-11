@@ -103,7 +103,15 @@ const NAME_OVERRIDES: Record<string,string> = {
   "Okugawa, Yasunobu":"오쿠가와 야스노부","Yamano, Taichi":"야마노 다이치","Matsumoto, Kengo":"마쓰모토 겐고","Yoshimura, Kojiro":"요시무라 고지로","Takanashi, Hirotoshi":"다카나시 히로토시",
   "Kanemaru, Yumeto":"가네마루 유메토","Yanagi, Yuya":"야나기 유야","Ohno, Yudai":"오노 유다이","Takahashi, Hiroto":"다카하시 히로토","Muller, Kyle":"카일 뮬러",
   "Ogawa, Yasuhiro":"오가와 야스히로","Takahashi, Keiji":"다카하시 게이지","Shimizu, Noboru":"시미즈 노보루","Taguchi, Kazuto":"다구치 가즈토","Kizawa, Naofumi":"기자와 나오후미",
-  "Quijada, Jose":"호세 키하다","Liranzo, Jesus":"헤수스 리란조","Santana, Domingo":"도밍고 산타나","Osuna, Jose":"호세 오수나"
+  "Quijada, Jose":"호세 키하다","Liranzo, Jesus":"헤수스 리란조","Santana, Domingo":"도밍고 산타나","Osuna, Jose":"호세 오수나",
+  "Dolis, Rafael":"라파엘 돌리스","Martinez, Raidel":"라이델 마르티네스","Reynolds, Sean":"션 레이놀즈","Ruiz, Jose":"호세 루이스",
+  "Marcelino, Hansel":"한셀 마르셀리노","Osuna, Roberto":"로베르토 오수나","Hernandez, Darwinzon":"다윈존 에르난데스","Machado, Andres":"안드레스 마차도",
+  "Hearn, Taylor":"테일러 헌","Mejia, Humberto":"움베르토 메히아","Severino, Anderson":"앤더슨 세베리노","Baldonado, Alberto":"알베르토 발도나도",
+  "Howard, Spencer":"스펜서 하워드","Whitley, Forrest":"포레스트 휘틀리","Bido, Osvaldo":"오스발도 비도","Duplantier, Jon":"존 듀플랜티어",
+  "Espinoza, Anderson":"앤더슨 에스피노자","Hjelle, Sean":"션 젤리","Perdomo, Luis":"루이스 페르도모","Contreras, Roansy":"로안시 콘트레라스",
+  "Marte, Yunior":"유니오르 마르테","Urena, Jose":"호세 우레냐","Ramirez, Emmanuel":"에마누엘 라미레스","Winans, Allan":"앨런 와이넌스",
+  "Wingenter, Trey":"트레이 윙엔터","Castillo, Jose":"호세 카스티요","Jackson, Andre":"안드레 잭슨","Long, Sam":"샘 롱","Lucchesi, Joey":"조이 루체시",
+  "Itoh, Hiromi":"이토 히로미","Kuri, Allen":"쿠리 아렌","Moinelo, Livan":"모이넬로","Moinelo":"모이넬로"
 };
 const ROMAJI: [string,string][] = [
  ["kyo","쿄"],["kyu","큐"],["kya","캬"],["sho","쇼"],["shu","슈"],["sha","샤"],["cho","초"],["chu","추"],["cha","차"],["ryo","료"],["ryu","류"],["rya","랴"],["nyo","뇨"],["nyu","뉴"],["nya","냐"],["hyo","효"],["hyu","휴"],["hya","햐"],["myo","묘"],["myu","뮤"],["mya","먀"],["gyo","교"],["gyu","규"],["gya","갸"],["byo","뵤"],["byu","뷰"],["bya","뱌"],["pyo","표"],["pyu","퓨"],["pya","퍄"],["tsu","쓰"],["shi","시"],["chi","치"],["fu","후"],["ji","지"],
@@ -111,11 +119,13 @@ const ROMAJI: [string,string][] = [
 ];
 function romanTokenToKo(token:string){
  let s=token.toLowerCase().replace(/[^a-z]/g,""); let out="";
- while(s){let matched=false; for(const [r,k] of ROMAJI){if(s.startsWith(r)){out+=k;s=s.slice(r.length);matched=true;break;}} if(!matched){out+=s[0].toUpperCase();s=s.slice(1);}}
- return out.replace(/ㄴ(?=[가-힣])/g,"ㄴ").replace(/ㄴ$/,"ㄴ");
+ const fallback:Record<string,string>={b:"브",c:"크",d:"드",f:"프",g:"그",h:"",j:"지",l:"르",p:"프",q:"쿠",r:"르",s:"스",t:"트",v:"브",w:"우",x:"크스",y:"이",z:"즈"};
+ while(s){let matched=false; for(const [r,k] of ROMAJI){if(s.startsWith(r)){out+=k;s=s.slice(r.length);matched=true;break;}} if(!matched){out+=fallback[s[0]]??"";s=s.slice(1);}}
+ return out.replace(/([가-힣])ㄴ/g,(_m,ch)=>{const code=ch.charCodeAt(0)-0xac00;return code%28===0?String.fromCharCode(ch.charCodeAt(0)+4):`${ch}ㄴ`;});
 }
 export function playerNameKo(name:string){
  const clean=name.replace(/^[*+]/,"").normalize("NFKC").replace(/[\s　]+/g," ").trim();
+ if(/[\uAC00-\uD7A3]/.test(clean)) return clean;
  const japaneseOverride=Object.entries(JAPANESE_NAME_OVERRIDES).find(([key])=>normalizePitcherName(key)===normalizePitcherName(clean))?.[1];
  if(japaneseOverride) return japaneseOverride;
  const romanOverride=Object.entries(NAME_OVERRIDES).find(([key])=>normalizePitcherName(key)===normalizePitcherName(clean))?.[1];

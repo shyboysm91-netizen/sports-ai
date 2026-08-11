@@ -78,7 +78,7 @@ export async function generateMetadata({
   const home = normalizeTeamName(league, first(query.home) || parsed.home);
   const date = first(query.date) || route.date;
   const label = leagueLabel(league);
-  const title = `${away} vs ${home} ${label} AI 분석 및 승부예측`;
+  const title = `${away} vs ${home} ${label} 경기 데이터 분석`;
   const description = `${date} ${away} vs ${home} 경기의 선발투수, 최근 10경기, 맞대결, 팀 전력과 AI 승리 확률 및 예상 결과를 확인하세요.`;
   const canonical = cleanCanonical(league, route.date, away, home);
 
@@ -161,7 +161,7 @@ export default async function AnalysisGamePage({
         "@type": "WebPage",
         "@id": `${canonical}#webpage`,
         url: canonical,
-        name: `${away} vs ${home} ${leagueLabel(league)} AI 분석 및 승부예측`,
+        name: `${away} vs ${home} ${leagueLabel(league)} 경기 데이터 분석`,
         description: `${date} ${away} vs ${home} 경기의 선발투수, 최근 10경기, 맞대결, 팀 전력과 AI 승리 확률 및 예상 결과를 제공합니다.`,
         inLanguage: "ko-KR",
         isPartOf: {
@@ -194,7 +194,7 @@ export default async function AnalysisGamePage({
           },
           {
             "@type": "Question",
-            name: "AI 승부예측은 확정 결과인가요?",
+            name: "AI 분석은 확정 결과인가요?",
             acceptedAnswer: {
               "@type": "Answer",
               text: "아닙니다. AI 분석은 참고용 예상이며 실제 경기 결과를 보장하지 않습니다.",

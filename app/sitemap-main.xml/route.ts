@@ -1,20 +1,31 @@
 import { NextResponse } from "next/server";
+import { GUIDE_ARTICLES } from "../lib/guides";
 
 export const dynamic = "force-static";
 export const revalidate = 3600;
 
 const BASE_URL = "https://장군분석.kr";
 
-const PAGES = [
+const PAGES: Array<readonly [string,string,string]> = [
   ["", "daily", "1.0"],
   ["/game", "daily", "0.9"],
   ["/mlb-game", "daily", "0.9"],
   ["/npb-game", "daily", "0.9"],
+  ["/players", "daily", "0.9"],
+  ["/players/kbo", "daily", "0.8"],
+  ["/players/mlb", "daily", "0.8"],
+  ["/players/npb", "daily", "0.8"],
   ["/about", "monthly", "0.6"],
   ["/contact", "yearly", "0.5"],
   ["/privacy", "yearly", "0.4"],
   ["/terms", "yearly", "0.4"],
-] as const;
+  ["/guide", "weekly", "0.8"],
+  ["/guide/how-it-works", "monthly", "0.7"],
+  ["/guide/bullpen-fatigue", "monthly", "0.7"],
+  ["/guide/whip", "monthly", "0.7"],
+  ["/guide/ops", "monthly", "0.7"],
+  ...GUIDE_ARTICLES.map((guide)=>[`/guide/${guide.slug}`,"monthly","0.7"] as const),
+];
 
 function xmlEscape(value: string) {
   return value

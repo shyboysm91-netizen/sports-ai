@@ -27,10 +27,16 @@ function wrap(text: string, max = 18) {
   for (const ch of chars) { line += ch; if (line.length >= max) { lines.push(line); line = ""; } }
   if (line) lines.push(line); return lines.slice(0, 3);
 }
+function matchupLabel(value: string) {
+  const wins = Number((String(value).match(/(\d+)\s*승/) || [])[1] || 0);
+  const draws = Number((String(value).match(/(\d+)\s*무/) || [])[1] || 0);
+  const losses = Number((String(value).match(/(\d+)\s*패/) || [])[1] || 0);
+  return wins || draws || losses ? `${wins}승${draws ? ` ${draws}무` : ""} ${losses}패` : value;
+}
 function slideSvg(title: string, lines: string[], footer: string, isFirstSlide = false) {
   const text = lines.flatMap((line, i) => wrap(line).map((part, j) => `<text x="540" y="${700 + (i * 150) + (j * 72)}" text-anchor="middle" fill="#f8fafc" font-size="58" font-weight="700">${safe(part)}</text>`)).join("");
   const topBrand = isFirstSlide
-    ? `<defs><linearGradient id="brand" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#7c3aed"/></linearGradient></defs><rect x="310" y="70" width="460" height="88" rx="44" fill="url(#brand)"/><text x="540" y="127" text-anchor="middle" fill="#ffffff" font-size="48" font-weight="900">장군분석.kr</text>`
+    ? `<rect x="210" y="64" width="660" height="92" rx="46" fill="#f8fafc" stroke="#cbd5e1" stroke-width="4"/><circle cx="270" cy="110" r="17" fill="#16a34a"/><text x="540" y="127" text-anchor="middle" fill="#0f172a" font-size="48" font-weight="900">장군분석.kr</text>`
     : "";
   return `<svg width="1080" height="1920" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#07111f"/><stop offset="1" stop-color="#101827"/></linearGradient></defs><rect width="1080" height="1920" fill="url(#g)"/>${topBrand}<circle cx="540" cy="310" r="120" fill="#162b4d"/><text x="540" y="350" text-anchor="middle" font-size="110">⚾</text><text x="540" y="540" text-anchor="middle" fill="#60a5fa" font-size="66" font-weight="800">${safe(title)}</text>${text}<rect x="90" y="1710" width="900" height="2" fill="#334155"/><text x="540" y="1790" text-anchor="middle" fill="#94a3b8" font-size="34">${safe(footer)}</text><text x="540" y="1848" text-anchor="middle" fill="#f8fafc" font-size="34" font-weight="800">장군분석.kr</text></svg>`;
 }
@@ -45,6 +51,17 @@ async function synthesize(text: string, out: string) {
   const r = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(key)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: { text }, voice: { languageCode: "ko-KR", ssmlGender: "NEUTRAL" }, audioConfig: { audioEncoding: "MP3", speakingRate: 1.08 } }) });
   const j = await r.json(); if (!r.ok || !j?.audioContent) return false; await fs.writeFile(out, Buffer.from(j.audioContent, "base64")); return true;
 }
+async function mediaDuration(file: string) {
+  if (!ffmpegPath) return 0;
+  try {
+    await execFileAsync(ffmpegPath, ["-i", file, "-f", "null", "-"], { timeout: 30000 });
+    return 0;
+  } catch (error) {
+    const stderr = String((error as { stderr?: string })?.stderr || "");
+    const match = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+    return match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : 0;
+  }
+}
 async function renderVideo(game: Game, league: ContentLeague, date: string, siteUrl: string) {
   if (!ffmpegPath) throw new Error("ffmpeg 실행 파일을 찾지 못했습니다.");
   const away = game.away || "원정팀", home = game.home || "홈팀";
@@ -52,29 +69,37 @@ async function renderVideo(game: Game, league: ContentLeague, date: string, site
   const analysis = await loadReelAnalysis(siteUrl, league, game, date);
   const predicted = Number(analysis.homeWinRate) >= 50 ? home : away;
   const slides = [
-    ["오늘의 핵심 경기", [`${away} vs ${home}`, `${league} ${date}`]],
+    ["오늘 승부를 가를 3가지", [`${away} vs ${home}`, "선발 · 최근 흐름 · 맞대결"]],
     ["선발투수 비교", [`${away}: ${a} · ERA ${analysis.awayEra}`, `${home}: ${h} · ERA ${analysis.homeEra}`]],
     ["최근 10경기", [`${away}: ${analysis.awayRecent}`, `${home}: ${analysis.homeRecent}`]],
-    ["최근 맞대결", [`${away}: ${analysis.awayH2h}`, `${home}: ${analysis.homeH2h}`]],
+    ["최근 맞대결", [`${away}: ${matchupLabel(analysis.awayH2h)}`, `${home}: ${matchupLabel(analysis.homeH2h)}`]],
     ["AI 최종 예측", [`${predicted} 우세 · ${analysis.homeWinRate}%`, `예상 점수 ${analysis.awayScore} : ${analysis.homeScore}`]],
-    ["전체 분석 확인", [analysis.summary, "무료 AI 야구분석", "장군분석.kr"]],
+    ["전체 데이터 확인", [analysis.summary, "프로필 링크에서 무료 확인", "장군분석.kr"]],
   ];
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sports-ai-auto-"));
+  const narration = `${league} ${away} 대 ${home}, 오늘 승부를 가를 세 가지를 확인합니다. 원정 선발 ${a}, 평균자책점 ${analysis.awayEra}. 홈 선발 ${h}, 평균자책점 ${analysis.homeEra}. 최근 열 경기 흐름은 ${away} ${analysis.awayRecent}, ${home} ${analysis.homeRecent}. AI 분석 결과 ${predicted} 우세, 예상 점수 ${analysis.awayScore} 대 ${analysis.homeScore}입니다. 선발과 불펜, 최근 흐름 전체 데이터는 프로필 링크에서 확인하세요.`;
+  const audio = path.join(dir, "voice.mp3"); const hasAudio = await synthesize(narration, audio);
+  const voiceDuration = hasAudio ? await mediaDuration(audio) : 0;
+  const perSlide = voiceDuration > 0 ? Math.max(1.5, (voiceDuration + 0.12) / slides.length) : 3;
   const concat: string[] = [];
   for (let i = 0; i < slides.length; i++) {
     const png = path.join(dir, `slide-${i}.png`);
     await sharp(Buffer.from(slideSvg(slides[i][0] as string, slides[i][1] as string[], `${away} vs ${home}`, i === 0))).png().toFile(png);
-    concat.push(`file '${png.replaceAll("'", "'\\''")}'`, `duration 2.5`);
+    concat.push(`file '${png.replaceAll("'", "'\\''")}'`, `duration ${perSlide.toFixed(3)}`);
   }
   concat.push(`file '${path.join(dir, `slide-${slides.length - 1}.png`).replaceAll("'", "'\\''")}'`);
   const list = path.join(dir, "slides.txt"); await fs.writeFile(list, concat.join("\n"));
-  const narration = `${league} ${away} 대 ${home}. 원정 선발 ${a}, 평균자책점 ${analysis.awayEra}. 홈 선발 ${h}, 평균자책점 ${analysis.homeEra}. 최근 열 경기 흐름은 ${away} ${analysis.awayRecent}, ${home} ${analysis.homeRecent}. AI 분석 결과 ${predicted} 우세, 예상 점수 ${analysis.awayScore} 대 ${analysis.homeScore}입니다. 더 자세한 분석은 장군분석.kr에서 확인하세요.`;
-  const audio = path.join(dir, "voice.mp3"); const hasAudio = await synthesize(narration, audio);
   const output = path.join(dir, "sports-ai-auto.mp4");
   const args = ["-y", "-f", "concat", "-safe", "0", "-i", list];
-  if (hasAudio) args.push("-i", audio, "-shortest");
-  args.push("-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-b:v", "1100k", "-maxrate", "1400k", "-bufsize", "2200k");
-  if (hasAudio) args.push("-c:a", "aac", "-b:a", "96k");
+  if (hasAudio) {
+    args.push("-i", audio, "-f", "lavfi", "-i", `aevalsrc=0.025*(sin(2*PI*110*t)+0.45*sin(2*PI*164.81*t)+0.3*sin(2*PI*220*t)):s=48000:d=${Math.max(voiceDuration, 18).toFixed(2)}`);
+    const musicFadeAt = Math.max(1, voiceDuration - 2).toFixed(2);
+    args.push("-filter_complex", `[1:a]volume=1.0[voice];[2:a]volume=0.30,afade=t=in:st=0:d=0.8,afade=t=out:st=${musicFadeAt}:d=2[music];[voice][music]amix=inputs=2:duration=first:dropout_transition=0[aout]`, "-map", "0:v:0", "-map", "[aout]", "-shortest");
+  } else {
+    args.push("-f", "lavfi", "-i", `aevalsrc=0.025*(sin(2*PI*110*t)+0.45*sin(2*PI*164.81*t)+0.3*sin(2*PI*220*t)):s=48000:d=${(slides.length * perSlide).toFixed(2)}`, "-map", "0:v:0", "-map", "1:a:0", "-shortest");
+  }
+  args.push("-vf", "fps=30,format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-maxrate", "10M", "-bufsize", "20M");
+  args.push("-c:a", "aac", "-b:a", "192k");
   args.push("-movflags", "+faststart", output);
   await execFileAsync(ffmpegPath, args, { timeout: 240000, maxBuffer: 1024 * 1024 * 8 });
   return { dir, output, narration };
@@ -100,7 +125,7 @@ export async function runAutomaticContent(siteUrl: string): Promise<AutoResult[]
       try {
         const buffer = await fs.readFile(output); const approvalId = randomUUID();
         const title = `${game.away || "원정팀"} vs ${game.home || "홈팀"}`;
-        const caption = `⚾ ${league} ${title}\n\n${narration}\n\n#야구 #${league} #야구분석 #장군분석 #경기예측`;
+        const caption = `⚾ ${league} ${title}\n\n오늘 승부를 가를 핵심 변수는 무엇일까요?\n${narration}\n\n선발·불펜·최근 흐름 전체 데이터는 프로필 링크에서 무료로 확인하세요.\n여러분은 어느 팀을 주목하시나요? 댓글로 남겨주세요.\n\n#${league} #야구 #야구분석 #장군분석`;
         const platforms = ["youtube", "instagram", "tiktok"];
         const payload = encode({ approvalId, league, date, away: game.away, home: game.home, title, platforms, exp: Date.now() + 24 * 60 * 60 * 1000 });
         const token = `${payload}.${sign(payload, secret)}`;

@@ -135,6 +135,33 @@ function PitcherTable({ items }: { items: any[] }) {
   );
 }
 
+function daysBetween(from: string, to: string) {
+  const start = new Date(`${from}T12:00:00+09:00`).getTime();
+  const end = new Date(`${to}T12:00:00+09:00`).getTime();
+  return Number.isFinite(start) && Number.isFinite(end)
+    ? Math.max(0, Math.round((end - start) / 86400000))
+    : null;
+}
+
+function BullpenTable({ items, details, gameDate }: { items: any[]; details: Record<string, any>; gameDate: string }) {
+  return (
+    <div className="mt-4 space-y-3">
+          {items.slice(0, 5).map((pitcher: any) => {
+            const detail = details[pitcher.name];
+            const last = detail?.recent10?.gamesDetail?.[0];
+            const rest = last?.date && gameDate ? daysBetween(last.date, gameDate) : null;
+            const fatigue = rest == null
+              ? "확인 중"
+              : rest <= 1 || Number(last?.pitches || 0) >= 30
+                ? "피로 주의"
+                : rest === 2 ? "연투 가능" : "휴식 충분";
+            return <div key={pitcher.name} className="rounded-xl border border-slate-800 bg-slate-950 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-black">{pitcher.name}</p><span className={`rounded-lg px-2.5 py-1 text-xs font-black ${fatigue === "피로 주의" ? "bg-amber-950 text-amber-300" : "bg-slate-900 text-slate-300"}`}>{rest != null ? `${rest}일 휴식 · ${fatigue}` : fatigue}</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5"><Metric label="최근 등판" value={last?.date?.slice(5) || (detail ? "기록 없음" : "확인 중")} /><Metric label="이닝" value={last?.innings ?? "-"} /><Metric label="투구 수" value={last?.pitches != null ? `${last.pitches}구` : "-"} /><Metric label="볼넷" value={last?.walks != null ? `${last.walks}개` : "-"} /><Metric label="시즌 ERA" value={fmt(pitcher.era, 2)} /></div></div>;
+          })}
+      <p className="mt-3 text-xs text-slate-500">피로도는 최근 등판일과 해당 경기 투구 수를 기준으로 표시합니다. 기록이 확인되지 않으면 임의로 추정하지 않습니다.</p>
+    </div>
+  );
+}
+
 function TeamPanel({
   name,
   standing,
@@ -421,8 +448,18 @@ function ResultBadge({ result }: { result: "승" | "패" | "무" }) {
   );
 }
 
-function MarketPanel({ away, home, data }: { away: string; home: string; data: any }) {
+function MarketPanel({ away, home, data, analysis }: { away: string; home: string; data: any; analysis: any }) {
   const market = data?.market;
+  const awaySummary = analysis?.awayRecent?.summary;
+  const homeSummary = analysis?.homeRecent?.summary;
+  const expectedTotal = awaySummary && homeSummary
+    ? (Number(awaySummary.averageRunsFor ?? 0) + Number(awaySummary.averageRunsAgainst ?? 0) + Number(homeSummary.averageRunsFor ?? 0) + Number(homeSummary.averageRunsAgainst ?? 0)) / 2
+    : null;
+  const totalLine = market?.total?.line;
+  const totalEdge = expectedTotal != null && Number.isFinite(totalLine) ? expectedTotal - totalLine : null;
+  const totalPick = expectedTotal != null && Number.isFinite(totalLine)
+    ? expectedTotal >= totalLine + 1 ? "오버" : expectedTotal <= totalLine - 1 ? "언더" : "패스"
+    : null;
   return (
     <Card title="경기 배당">
       {market ? (
@@ -455,8 +492,13 @@ function MarketPanel({ away, home, data }: { away: string; home: string; data: a
                 <div className="mt-3 space-y-2 text-sm font-black">
                   <p className="flex justify-between"><span>언더 {market.total.line}</span><span>{market.total.under.toFixed(2)}</span></p>
                   <p className="flex justify-between"><span>오버 {market.total.line}</span><span>{market.total.over.toFixed(2)}</span></p>
+                  <div className="border-t border-slate-800 pt-3">
+                    <p className="flex justify-between text-slate-300"><span>시장 기준점</span><span>{market.total.line.toFixed(1)}점</span></p>
+                    <p className="mt-1 flex justify-between text-blue-300"><span>AI 예상 총점</span><span>{expectedTotal != null ? `${expectedTotal.toFixed(1)}점` : "계산 불가"}</span></p>
+                    {totalEdge != null && <p className="mt-1 text-xs text-slate-500">기준점 대비 {totalEdge >= 0 ? "+" : ""}{totalEdge.toFixed(1)}점 · 최종 판단 {totalPick}</p>}
+                  </div>
                 </div>
-              ) : <p className="mt-3 text-sm text-slate-500">미발표</p>}
+              ) : <p className="mt-3 text-sm text-slate-500">기준점 확인 전</p>}
             </div>
           </div>
         </>
@@ -655,6 +697,9 @@ function Content() {
   const homeStarter = query.get("homeStarter") || "";
   const awayStarterCode = query.get("awayStarterCode") || "";
   const homeStarterCode = query.get("homeStarterCode") || "";
+  const awayApiName = query.get("awayApiName") || away;
+  const homeApiName = query.get("homeApiName") || home;
+  const commenceTime = query.get("commenceTime") || "";
 
   const [data, setData] = useState<any>(null);
   const [marketData, setMarketData] = useState<any>(null);
@@ -662,6 +707,7 @@ function Content() {
   const [scheduleData, setScheduleData] = useState<any>(null);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("종합");
+  const [bullpenDetails, setBullpenDetails] = useState<Record<string, any>>({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -680,7 +726,7 @@ function Content() {
         const [analysisResponse, marketResponse, weatherResponse, scheduleResponse] =
           await Promise.all([
             fetch(dataCacheUrl(`${analysisBase}&fast=1`, 300), baseOptions),
-            fetch(dataCacheUrl(`/api/npb/market?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}`, 600), baseOptions),
+            fetch(dataCacheUrl(`/api/npb/market?league=NPB&away=${encodeURIComponent(awayApiName)}&home=${encodeURIComponent(homeApiName)}&date=${encodeURIComponent(date)}&commenceTime=${encodeURIComponent(commenceTime)}`, 600), baseOptions),
             fetch(dataCacheUrl(`/api/npb/weather?stadium=${encodeURIComponent(stadium)}&date=${encodeURIComponent(date)}`, 3600), baseOptions),
             fetch(dataCacheUrl(`/api/npb?date=${encodeURIComponent(date)}`, 300), baseOptions),
           ]);
@@ -720,7 +766,31 @@ function Content() {
 
     loadAll();
     return () => controller.abort();
-  }, [away, home, date, stadium, awayStarter, homeStarter, awayStarterCode, homeStarterCode]);
+  }, [away, home, date, stadium, awayStarter, homeStarter, awayStarterCode, homeStarterCode, awayApiName, homeApiName, commenceTime]);
+
+  useEffect(() => {
+    if (activeTab !== "불펜" || !data) return;
+    const controller = new AbortController();
+    const targets = [
+      ...(data.awayBullpen || []).slice(0, 5).map((pitcher: any) => ({ ...pitcher, team: away, opponent: home })),
+      ...(data.homeBullpen || []).slice(0, 5).map((pitcher: any) => ({ ...pitcher, team: home, opponent: away })),
+    ].filter((pitcher: any) => !bullpenDetails[pitcher.name]);
+    if (!targets.length) return;
+
+    Promise.all(targets.map(async (pitcher: any) => {
+      const url = `/api/npb/pitcher-detail?team=${encodeURIComponent(pitcher.team)}&opponent=${encodeURIComponent(pitcher.opponent)}&date=${encodeURIComponent(date)}&name=${encodeURIComponent(pitcher.name)}&originalName=${encodeURIComponent(pitcher.originalName || pitcher.name)}&playerCode=${encodeURIComponent(pitcher.playerCode || "")}&lookback=21&bullpenVersion=2`;
+      try {
+        const response = await fetch(dataCacheUrl(url, 1800), { signal: controller.signal });
+        const detail = await response.json();
+        return [pitcher.name, response.ok && detail?.success ? detail : { recent10: { gamesDetail: [] } }] as const;
+      } catch {
+        return [pitcher.name, { recent10: { gamesDetail: [] } }] as const;
+      }
+    })).then((entries) => {
+      if (!controller.signal.aborted) setBullpenDetails((current) => ({ ...current, ...Object.fromEntries(entries) }));
+    });
+    return () => controller.abort();
+  }, [activeTab, data, away, home, date, bullpenDetails]);
 
   const season = data ? advantageLabel(data.scores.season, away, home) : null;
   const batting = data ? advantageLabel(data.scores.batting, away, home) : null;
@@ -864,7 +934,7 @@ function Content() {
         <div className="mt-6 flex flex-wrap gap-2">{["종합","선발","최근경기","맞대결","불펜","배당"].map((tab)=><button key={tab} type="button" onClick={()=>setActiveTab(tab)} className={`rounded-xl border px-4 py-2 text-sm font-black ${activeTab===tab?"border-blue-500 bg-blue-600 text-white":"border-slate-700 bg-slate-900 text-slate-300"}`}>{tab}</button>)}</div>
 
         {activeTab==="배당" && <div className="mt-6">
-          <MarketPanel away={away} home={home} data={marketData} />
+          <MarketPanel away={away} home={home} data={marketData} analysis={data} />
         </div>}
 
         {activeTab==="종합" && <div className="mt-6">
@@ -932,10 +1002,10 @@ function Content() {
 
         {activeTab==="불펜" && <div className="mt-6 grid gap-5 md:grid-cols-2">
           <Card title={`${away} 불펜 핵심`}>
-            <PitcherTable items={data?.awayBullpen || []} />
+            <BullpenTable items={data?.awayBullpen || []} details={bullpenDetails} gameDate={date} />
           </Card>
           <Card title={`${home} 불펜 핵심`}>
-            <PitcherTable items={data?.homeBullpen || []} />
+            <BullpenTable items={data?.homeBullpen || []} details={bullpenDetails} gameDate={date} />
           </Card>
         </div>}
 
@@ -1017,7 +1087,7 @@ function Content() {
                   <div className="flex flex-wrap items-end justify-between gap-4">
                     <div>
                       <p className="text-sm font-black text-blue-400">
-                        AI 최종 추천
+                        AI 종합 분석
                       </p>
                       <h2 className="mt-2 text-3xl font-black">
                         {data.pick} 승

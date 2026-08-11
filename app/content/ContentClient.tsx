@@ -113,10 +113,11 @@ export default function ContentPage() {
   const [reelUrl, setReelUrl] = useState("");
   const [reelProgress, setReelProgress] = useState(0);
   const [bgmFile, setBgmFile] = useState<File | null>(null);
+  const [ttsFile, setTtsFile] = useState<File | null>(null);
   const [slideSeconds, setSlideSeconds] = useState(2.4);
   const [speaking, setSpeaking] = useState(false);
   const [narrationText, setNarrationText] = useState("");
-  const [reelOptions, setReelOptions] = useState({ bgm: false, subtitles: true, zoom: true, transition: true });
+  const [reelOptions, setReelOptions] = useState({ bgm: true, subtitles: true, zoom: true, transition: true });
 
   useEffect(() => {
     setUnlocked(sessionStorage.getItem("sports-ai-owner") === "ok");
@@ -227,14 +228,14 @@ export default function ContentPage() {
     const text = [
       `⚾ ${data.league} ${data.away} vs ${data.home}`,
       "",
-      `AI 예상: ${winner} 우세`,
-      `예상 스코어: ${data.awayScore} : ${data.homeScore}`,
-      `홈 승리 확률: ${data.homeWinRate}%`,
+      `오늘 승부를 가를 핵심은 무엇일까요?`,
+      `장군분석 데이터는 ${winner} 우세로 봤습니다.`,
       "",
       data.summary,
       "",
-      "전체 분석은 장군분석.kr에서 확인하세요.",
-      `#야구 #${data.league} #야구분석 #스포츠AI #경기예측 #${data.away.replaceAll(" ", "")} #${data.home.replaceAll(" ", "")}`,
+      "선발·불펜·최근 흐름 전체 데이터는 프로필 링크에서 무료로 확인하세요.",
+      "여러분은 어느 팀의 핵심 변수가 더 크다고 보시나요? 댓글로 남겨주세요.",
+      `#${data.league} #야구 #야구분석 #${data.away.replaceAll(" ", "")} #${data.home.replaceAll(" ", "")}`,
     ].join("\n");
     setCaption(text);
     setAutomationMessage("플랫폼 공용 캡션을 만들었습니다.");
@@ -265,17 +266,50 @@ export default function ContentPage() {
 
       const narration = narrationText.split("\n").map((line) => line.trim()).filter(Boolean);
       while (narration.length < 6) narration.push(buildNarration(data, headline)[narration.length] || "오늘 경기 분석");
-      const audioSources: AudioBufferSourceNode[] = [];
-      const totalDuration = 6 * slideSeconds;
+      const audioSources: AudioScheduledSourceNode[] = [];
+      let totalDuration = 6 * slideSeconds;
+      let ttsDuration = 0;
+      let detectedSlideDurations: number[] | null = null;
 
-      if (reelOptions.bgm && bgmFile) {
-        const buffer = await audioContext.decodeAudioData(await bgmFile.arrayBuffer());
+      if (ttsFile) {
+        const buffer = await audioContext.decodeAudioData(await ttsFile.arrayBuffer());
         const source = audioContext.createBufferSource();
         const gain = audioContext.createGain();
-        gain.gain.value = 0.22;
-        source.buffer = buffer; source.loop = true;
-        source.connect(gain).connect(destination); source.start();
+        gain.gain.value = 1;
+        source.buffer = buffer;
+        source.connect(gain).connect(destination);
+        source.start(audioContext.currentTime + 0.12);
         audioSources.push(source); hasAudio = true;
+        ttsDuration = buffer.duration;
+        totalDuration = Math.max(6, buffer.duration + 0.18);
+        detectedSlideDurations = detectSpeechDurations(buffer, 6);
+      }
+
+      if (reelOptions.bgm) {
+        if (bgmFile) {
+          const buffer = await audioContext.decodeAudioData(await bgmFile.arrayBuffer());
+          const source = audioContext.createBufferSource();
+          const gain = audioContext.createGain();
+          gain.gain.value = ttsFile ? 0.075 : 0.14;
+          source.buffer = buffer; source.loop = true;
+          source.connect(gain).connect(destination); source.start();
+          audioSources.push(source); hasAudio = true;
+        } else {
+          // 외부 저작권 문제가 없는 코드 생성형 앰비언트 배경음입니다.
+          const master = audioContext.createGain();
+          const filter = audioContext.createBiquadFilter();
+          master.gain.value = ttsFile ? 0.018 : 0.035;
+          filter.type = "lowpass"; filter.frequency.value = 620;
+          master.connect(filter).connect(destination);
+          [110, 164.81, 220].forEach((frequency, i) => {
+            const oscillator = audioContext!.createOscillator();
+            oscillator.type = i === 0 ? "sine" : "triangle";
+            oscillator.frequency.value = frequency;
+            oscillator.connect(master); oscillator.start();
+            audioSources.push(oscillator);
+          });
+          hasAudio = true;
+        }
       }
 
 
@@ -289,7 +323,7 @@ export default function ContentPage() {
         "video/webm",
       ];
       const mimeType = mimeCandidates.find((value) => MediaRecorder.isTypeSupported(value)) || "video/webm";
-      const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 1_400_000, audioBitsPerSecond: 96_000 });
+      const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8_000_000, audioBitsPerSecond: 192_000 });
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
       const finished = new Promise<Blob>((resolve, reject) => {
@@ -301,12 +335,19 @@ export default function ContentPage() {
       const slide = document.createElement("canvas"); slide.width = 1080; slide.height = 1350;
       const slideCtx = slide.getContext("2d");
       if (!slideCtx) throw new Error("카드 이미지를 만들지 못했습니다.");
-      const perSlide = totalDuration / 6;
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      slideCtx.imageSmoothingEnabled = true; slideCtx.imageSmoothingQuality = "high";
+      const weights = narration.slice(0, 6).map((line) => Math.max(8, [...line].length));
+      const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+      const slideDurations = detectedSlideDurations || (ttsDuration > 0
+        ? weights.map((weight) => Math.max(1.15, totalDuration * weight / weightTotal))
+        : weights.map(() => totalDuration / 6));
+      const durationScale = totalDuration / slideDurations.reduce((sum, value) => sum + value, 0);
       const fullStarted = performance.now();
       for (let index = 0; index < 6; index += 1) {
         drawCard(slideCtx, index, data, headline);
         const started = performance.now();
-        const slideMs = perSlide * 1000;
+        const slideMs = slideDurations[index] * durationScale * 1000;
         while (performance.now() - started < slideMs) {
           const elapsed = performance.now() - started;
           const t = Math.min(1, elapsed / slideMs);
@@ -325,6 +366,8 @@ export default function ContentPage() {
           if (reelOptions.subtitles) drawSubtitle(ctx, narration[index], 540, 1650);
           ctx.fillStyle = "#4d9cff"; ctx.font = "800 28px Arial";
           ctx.fillText(`SPORTS AI · ${index + 1}/6`, 540, 1800);
+          ctx.fillStyle = "rgba(255,255,255,.16)"; ctx.fillRect(70, 1845, 940, 8);
+          ctx.fillStyle = "#4d9cff"; ctx.fillRect(70, 1845, 940 * Math.min(1, (performance.now() - fullStarted) / (totalDuration * 1000)), 8);
           const progressed = Math.min(99, Math.round(((performance.now() - fullStarted) / (totalDuration * 1000)) * 100));
           setReelProgress(progressed);
           await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -543,7 +586,16 @@ export default function ContentPage() {
               <p className="mt-2 text-xs text-slate-500">줄마다 한 장면의 자막으로 사용됩니다. 무료 음성은 대본 확인용이며 영상에는 자막과 선택한 배경음악이 들어갑니다.</p>
             </div>
           </div>
-          {reelOptions.bgm && <div className="mt-3"><input type="file" accept="audio/*" onChange={(e)=>setBgmFile(e.target.files?.[0]||null)} className="block w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm"/><p className="mt-1 text-xs text-slate-500">직접 보유하거나 사용 권한이 있는 음악 파일만 선택하세요.</p></div>}
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="rounded-xl border border-sky-900 bg-slate-900 p-3 text-sm font-bold">TTS 음성 파일
+              <input type="file" accept="audio/*" onChange={(e)=>setTtsFile(e.target.files?.[0]||null)} className="mt-2 block w-full text-xs font-normal"/>
+              <span className="mt-2 block text-xs font-normal text-slate-400">Typecast에서 받은 전체 음성을 넣으면 말 길이에 맞춰 장면이 자동 전환됩니다.</span>
+            </label>
+            {reelOptions.bgm && <label className="rounded-xl border border-violet-900 bg-slate-900 p-3 text-sm font-bold">배경음악 (선택)
+              <input type="file" accept="audio/*" onChange={(e)=>setBgmFile(e.target.files?.[0]||null)} className="mt-2 block w-full text-xs font-normal"/>
+              <span className="mt-2 block text-xs font-normal text-slate-400">비워두면 저작권 걱정 없는 기본 앰비언트 음악이 자동 적용됩니다.</span>
+            </label>}
+          </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <button type="button" onClick={makeCaption} className="rounded-xl border border-slate-700 px-4 py-3 font-black">캡션 자동 생성</button>
             <button type="button" onClick={makeReel} disabled={makingReel} className="rounded-xl bg-violet-600 px-4 py-3 font-black disabled:opacity-50">{makingReel ? `릴스 생성 중 ${reelProgress}%` : "9:16 릴스 만들기"}</button>
@@ -558,6 +610,12 @@ export default function ContentPage() {
             <button type="button" onClick={sendTelegram} disabled={sendingTelegram || !connection.telegram} className="w-full rounded-xl bg-sky-600 px-4 py-4 text-lg font-black disabled:opacity-40">{sendingTelegram ? "전송 중..." : connection.telegram ? (reelBlob ? "릴스와 발행 승인 요청 보내기" : "발행 승인 요청 보내기") : "텔레그램 연결이 필요합니다"}</button>
             <p className="text-sm leading-6 text-slate-400">{reelBlob ? "생성된 WebM 릴스 파일과 캡션, 승인·취소 버튼을 함께 보냅니다." : "릴스를 먼저 만들면 텔레그램에서 영상까지 확인할 수 있습니다."}</p>
             <Link href="/content/telegram-setup" className="rounded-xl border border-sky-700 px-4 py-4 text-center font-black text-sky-300">연결 설정</Link>
+          </div>
+          <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-900 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div><h3 className="font-black">인스타그램 릴스 연결</h3><p className="mt-1 text-xs text-slate-400">Meta에서 발급한 액세스 토큰과 Instagram 계정 ID가 필요합니다.</p></div>
+              {connection.instagram ? <span className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-black">연결됨</span> : <Link href="/content/instagram-setup" className="rounded-lg bg-gradient-to-r from-pink-600 to-violet-600 px-3 py-2 text-sm font-black">인스타 키 설정</Link>}
+            </div>
           </div>
           <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-900 p-4">
             <div className="flex items-center justify-between gap-3"><div><h3 className="font-black">유튜브 쇼츠 업로드</h3><p className="mt-1 text-xs text-slate-400">구글 계정을 연결한 뒤 방금 만든 WebM 파일을 선택하세요.</p></div>{connection.youtube ? <button type="button" onClick={async()=>{await fetch("/api/content/youtube/disconnect",{method:"POST"});location.reload();}} className="rounded-lg border border-slate-600 px-3 py-2 text-xs font-bold">연결 해제</button> : youtubeConfigured ? <a href="/api/content/youtube/auth" className="rounded-lg bg-red-600 px-3 py-2 text-sm font-black">유튜브 계정 연결</a> : <Link href="/content/youtube-setup" className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-black">연결 설정 보기</Link>}</div>
@@ -584,10 +642,40 @@ export default function ContentPage() {
 }
 
 
+function detectSpeechDurations(buffer: AudioBuffer, count: number) {
+  const samples = buffer.getChannelData(0);
+  const windowSize = Math.max(128, Math.floor(buffer.sampleRate * 0.02));
+  const levels: number[] = [];
+  let peak = 0;
+  for (let offset = 0; offset < samples.length; offset += windowSize) {
+    let energy = 0;
+    const end = Math.min(samples.length, offset + windowSize);
+    for (let i = offset; i < end; i += 1) energy += samples[i] * samples[i];
+    const rms = Math.sqrt(energy / Math.max(1, end - offset));
+    levels.push(rms); peak = Math.max(peak, rms);
+  }
+  const threshold = Math.max(0.004, peak * 0.075);
+  const gaps: Array<{ start: number; end: number; length: number }> = [];
+  let gapStart = -1;
+  levels.forEach((level, index) => {
+    if (level < threshold && gapStart < 0) gapStart = index;
+    if ((level >= threshold || index === levels.length - 1) && gapStart >= 0) {
+      const end = index;
+      if ((end - gapStart) * 0.02 >= 0.16 && gapStart > 2 && end < levels.length - 2) gaps.push({ start: gapStart, end, length: end - gapStart });
+      gapStart = -1;
+    }
+  });
+  const cuts = gaps.sort((a, b) => b.length - a.length).slice(0, count - 1).map((gap) => ((gap.start + gap.end) / 2) * 0.02).sort((a, b) => a - b);
+  if (cuts.length !== count - 1) return null;
+  const boundaries = [0, ...cuts, buffer.duration];
+  const durations = boundaries.slice(1).map((end, index) => end - boundaries[index]);
+  return durations.every((duration) => duration >= 0.75) ? durations : null;
+}
+
 function buildNarration(d: ContentData, headline: string) {
   const predicted = Number(d.homeWinRate) >= 50 ? d.home : d.away;
   return [
-    headline,
+    `${d.away} 대 ${d.home}, 오늘 승부를 가를 세 가지를 확인합니다.`,
     `선발 투수는 ${d.away} ${d.awayStarter}, 평균자책점 ${d.awayEra}, ${d.home} ${d.homeStarter}, 평균자책점 ${d.homeEra}입니다.`,
     `최근 열 경기 흐름은 ${d.away} ${d.awayRecent}, ${d.home} ${d.homeRecent}입니다.`,
     `맞대결 기록은 ${d.away} ${d.awayH2h}, ${d.home} ${d.homeH2h}입니다.`,
@@ -624,15 +712,14 @@ function drawCard(ctx: CanvasRenderingContext2D, index: number, d: ContentData, 
 
   if (index === 0) {
     pill(ctx, 70, 260, 390, 56, "오늘 가장 주목할 경기", "#ff4f67");
-    headlineText(ctx, headline, 70, 390, 900, 78);
+    headlineText(ctx, `${d.away} vs ${d.home}`, 70, 390, 900, 72);
     versusBlock(ctx, d.away, d.home, 70, 650, 940, 200);
     ctx.fillStyle = "#8ea0b8"; ctx.font = "800 28px Arial";
-    ctx.fillText("SPORTS AI 추천", 70, 940);
-    ctx.fillStyle = "#ffffff"; ctx.font = "900 62px Arial";
-    ctx.fillText(`${pickTeam} 우세`, 70, 1015);
-    progressBar(ctx, 70, 1075, 940, 42, pickRate, predictedHome ? "#4d9cff" : "#ff5b72");
-    ctx.fillStyle = "#ffffff"; ctx.font = "900 54px Arial"; ctx.textAlign = "right";
-    ctx.fillText(`${pickRate}%`, 1010, 1165); ctx.textAlign = "left";
+    ctx.fillText("결과를 가른 3가지 데이터", 70, 945);
+    ctx.fillStyle = "#ffffff"; ctx.font = "900 58px Arial";
+    ctx.fillText("선발 · 최근 흐름 · 불펜", 70, 1025);
+    ctx.fillStyle = "#4d9cff"; ctx.font = "900 40px Arial";
+    ctx.fillText("마지막에 분석 결과를 공개합니다", 70, 1120);
   }
 
   if (index === 1) {
@@ -701,22 +788,17 @@ function drawHeader(ctx: CanvasRenderingContext2D, d: ContentData, index: number
   ctx.fillStyle = "#ffffff"; ctx.font = "900 28px Arial"; ctx.fillText(d.league, 70, 92);
   ctx.fillStyle = "#8ea0b8"; ctx.font = "800 25px Arial"; ctx.textAlign = "right"; ctx.fillText(d.date, 1010, 92);
 
-  // 첫 장에서만 새 도메인을 상단 중앙에 크게 노출합니다.
+  // 첫 장은 실제 주소창처럼 보여 도메인을 한눈에 기억하게 합니다.
   if (index === 0) {
-    const badgeX = 350;
-    const badgeY = 48;
-    const badgeW = 380;
-    const badgeH = 64;
-    const gradient = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH);
-    gradient.addColorStop(0, "#2563eb");
-    gradient.addColorStop(1, "#7c3aed");
-    ctx.fillStyle = gradient;
-    round(ctx, badgeX, badgeY, badgeW, badgeH, 32);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "900 36px Arial";
+    const badgeX = 255, badgeY = 42, badgeW = 570, badgeH = 76;
+    ctx.fillStyle = "#f8fafc"; round(ctx, badgeX, badgeY, badgeW, badgeH, 38); ctx.fill();
+    ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = "#16a34a"; ctx.font = "900 27px Arial"; ctx.textAlign = "left";
+    ctx.fillText("🔒", badgeX + 30, badgeY + 49);
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "900 38px Arial";
     ctx.textAlign = "center";
-    ctx.fillText("장군분석.kr", 540, 91);
+    ctx.fillText("장군분석.kr", 565, badgeY + 51);
   }
 
   ctx.textAlign = "left";
@@ -772,16 +854,19 @@ function formCard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
   ctx.fillStyle = "#ffffff"; ctx.font = "900 42px Arial"; ctx.fillText(shortTeam(team), x + 145, y + 92);
   const wl = parseWinLoss(recent);
   ctx.textAlign = "right"; ctx.fillStyle = accent; ctx.font = "900 52px Arial"; ctx.fillText(wl.label, x + w - 40, y + 94); ctx.textAlign = "left";
-  const results = buildFormDots(wl.wins, wl.losses, 10);
-  results.forEach((win, i) => { ctx.fillStyle = win ? "#22c55e" : "#ef4444"; ctx.beginPath(); ctx.arc(x + 70 + i * 82, y + 180, 25, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#ffffff"; ctx.font = "900 20px Arial"; ctx.textAlign = "center"; ctx.fillText(win ? "승" : "패", x + 70 + i * 82, y + 188); });
+  const results = buildFormDots(wl.wins, wl.draws, wl.losses);
+  results.forEach((result, i) => { ctx.fillStyle = result === "승" ? "#22c55e" : result === "무" ? "#64748b" : "#ef4444"; ctx.beginPath(); ctx.arc(x + 70 + i * 82, y + 180, 25, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = "#ffffff"; ctx.font = "900 20px Arial"; ctx.textAlign = "center"; ctx.fillText(result, x + 70 + i * 82, y + 188); });
+  ctx.textAlign = "right"; ctx.fillStyle = "#8ea0b8"; ctx.font = "700 20px Arial"; ctx.fillText(`완료 ${results.length}경기 기준`, x + w - 38, y + 225);
   ctx.textAlign = "left";
 }
 
 function matchupScore(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, away: string, home: string, awayRecord: string, homeRecord: string) {
+  const awayWl = parseWinLoss(awayRecord);
+  const homeWl = parseWinLoss(homeRecord);
   ctx.fillStyle = "rgba(255,255,255,.055)"; round(ctx, x, y, w, h, 34); ctx.fill();
   teamBadge(ctx, x + 165, y + 120, away, "#ff5b72", 62); teamBadge(ctx, x + w - 165, y + 120, home, "#4d9cff", 62);
   ctx.fillStyle = "#ffffff"; ctx.font = "900 40px Arial"; ctx.textAlign = "center"; ctx.fillText(shortTeam(away), x + 165, y + 225); ctx.fillText(shortTeam(home), x + w - 165, y + 225);
-  ctx.font = "900 92px Arial"; ctx.fillStyle = "#ff5b72"; ctx.fillText(cleanStat(awayRecord), x + 165, y + 345); ctx.fillStyle = "#4d9cff"; ctx.fillText(cleanStat(homeRecord), x + w - 165, y + 345);
+  ctx.font = "900 66px Arial"; ctx.fillStyle = "#ff5b72"; ctx.fillText(awayWl.label, x + 165, y + 345); ctx.fillStyle = "#4d9cff"; ctx.fillText(homeWl.label, x + w - 165, y + 345);
   ctx.fillStyle = "#8ea0b8"; ctx.font = "900 34px Arial"; ctx.fillText("VS", x + w / 2, y + 280); ctx.textAlign = "left";
 }
 
@@ -818,8 +903,8 @@ function cleanStat(value: string) { const s = String(value || "").trim(); return
 function clampPercent(value: string) { const n = Number(String(value || "").replace(/[^0-9.]/g, "")); return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : 50; }
 function teamInitial(team: string) { const clean = String(team || "?").replace(/[^A-Za-z0-9가-힣]/g, ""); return clean.slice(0, 1).toUpperCase() || "?"; }
 function shortTeam(team: string) { const s = String(team || "팀").trim(); return s.length > 10 ? `${s.slice(0, 10)}…` : s; }
-function parseWinLoss(value: string) { const s = String(value || ""); const w = Number((s.match(/(\d+)\s*승/) || [])[1] || 0); const l = Number((s.match(/(\d+)\s*패/) || [])[1] || 0); return { wins: w, losses: l, label: w || l ? `${w}승 ${l}패` : cleanStat(s) }; }
-function buildFormDots(wins: number, losses: number, count: number) { const total = Math.max(1, wins + losses); const winCount = Math.max(0, Math.min(count, Math.round(count * wins / total))); return Array.from({ length: count }, (_, i) => i < winCount); }
+function parseWinLoss(value: string) { const s = String(value || ""); const w = Number((s.match(/(\d+)\s*승/) || [])[1] || 0); const d = Number((s.match(/(\d+)\s*무/) || [])[1] || 0); const l = Number((s.match(/(\d+)\s*패/) || [])[1] || 0); return { wins: w, draws: d, losses: l, label: w || d || l ? `${w}승${d ? ` ${d}무` : ""} ${l}패` : cleanStat(s) }; }
+function buildFormDots(wins: number, draws: number, losses: number) { return [...Array(wins).fill("승"), ...Array(draws).fill("무"), ...Array(losses).fill("패")].slice(0, 10) as Array<"승" | "무" | "패">; }
 function wrapCentered(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, max: number, line: number) { const old = ctx.textAlign; ctx.textAlign = "center"; const chars = String(text || ""); let row = ""; const rows: string[] = []; for (const ch of chars) { const test = row + ch; if (ctx.measureText(test).width > max && row) { rows.push(row); row = ch; } else row = test; } if (row) rows.push(row); rows.slice(0, 2).forEach((r, i) => ctx.fillText(r, x, y + i * line)); ctx.textAlign = old; }
 function wrap(ctx:CanvasRenderingContext2D,text:string,x:number,y:number,max:number,line:number){String(text||"").split("\n").forEach((part)=>{let lineText="";for(const ch of part){const test=lineText+ch;if(ctx.measureText(test).width>max&&lineText){ctx.fillText(lineText,x,y);y+=line;lineText=ch}else lineText=test}if(lineText){ctx.fillText(lineText,x,y);y+=line}})}
 function round(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,r:number){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}

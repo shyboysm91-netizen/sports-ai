@@ -86,7 +86,7 @@ export async function deleteExpiredSportsCache() {
   const response = await fetch(
     `${SUPABASE_URL}/rest/v1/sports_cache?expires_at=lt.${encodeURIComponent(
       new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    )}`,
+    )}&cache_key=not.like.${encodeURIComponent("/api/betman%")}`,
     {
       method: "DELETE",
       headers: headers(),

@@ -158,7 +158,7 @@ async function bullpen(teamId:number,date:string) {
       const box=await getJson(`https://statsapi.mlb.com/api/v1/game/${game.gamePk}/boxscore`);
       const side=box?.teams?.home?.team?.id===teamId?box.teams.home:box.teams.away;
       const pitchers=(side?.pitchers??[]).slice(1);
-      for(const id of pitchers){ const row=side?.players?.[`ID${id}`]; const s=row?.stats?.pitching??{}; lines.push({date:game.date,name:playerNameKo(row?.person?.fullName??""),innings:text(s.inningsPitched)||"0",pitches:num(s.pitchesThrown),strikeouts:num(s.strikeOuts),walks:num(s.baseOnBalls),runs:num(s.runs)}); }
+      for(const id of pitchers){ const row=side?.players?.[`ID${id}`]; const s=row?.stats?.pitching??{}; const originalName=row?.person?.fullName??""; lines.push({date:game.date,name:playerNameKo(originalName),originalName,innings:text(s.inningsPitched)||"0",pitches:num(s.pitchesThrown),strikeouts:num(s.strikeOuts),walks:num(s.baseOnBalls),runs:num(s.runs)}); }
     }catch{}
   }
   const latest=targets[0]?.date; const latestLines=lines.filter(x=>x.date===latest); const totalPitches=lines.reduce((s,x)=>s+x.pitches,0); const yesterdayPitches=latestLines.reduce((s,x)=>s+x.pitches,0);
@@ -180,4 +180,3 @@ export async function GET(request:Request){
     return NextResponse.json({success:true,updatedAt:new Date().toISOString(),awayTeam,homeTeam,awayPitcher,homePitcher,awayRecent,homeRecent,headToHead:h2h,awayBullpen,homeBullpen});
   }catch(error){ return NextResponse.json({success:false,message:error instanceof Error?error.message:"MLB 상세 분석을 불러오지 못했습니다."},{status:500}); }
 }
-

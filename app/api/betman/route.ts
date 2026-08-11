@@ -11,6 +11,8 @@ type MarketResponse = {
   message?: string;
   bookmaker?: string;
   bookmakerCount?: number;
+  commenceTime?: string;
+  pregameSnapshot?: boolean;
   lastUpdate?: string;
   remaining?: string | null;
   used?: string | null;
@@ -75,6 +77,15 @@ function positiveNumber(value: unknown): value is number {
 }
 function finiteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+function isStarted(commenceTime: string | undefined) {
+  if (!commenceTime) return true;
+  const startsAt = Date.parse(commenceTime);
+  return !Number.isFinite(startsAt) || startsAt <= Date.now();
+}
+function isReasonablePregameMoneyline(away: number, home: number) {
+  // KBO 경기 전 승패 배당으로 보기 어려운 실시간/오류 값을 차단합니다.
+  return away >= 1.05 && home >= 1.05 && away <= 15 && home <= 15;
 }
 function selectBookmaker(event: ApiEvent, awayApi: string, homeApi: string) {
   const priority = ["fanduel", "draftkings", "betmgm", "williamhill_us", "bovada"];
@@ -147,7 +158,13 @@ export async function GET(req: Request) {
   const cacheFresh = cached ? new Date(cached.expires_at).getTime() > Date.now() : false;
 
   // 일반 방문자는 저장 데이터가 있으면 만료 여부와 관계없이 DB만 사용합니다.
-  if (cached && (!refresh || cacheFresh)) {
+  const cachedMoneyline = cached?.payload.market?.moneyline;
+  const cachedIsSafe =
+    cached?.payload.status !== "received" ||
+    (Boolean(cached.payload.commenceTime) &&
+      Boolean(cachedMoneyline) &&
+      isReasonablePregameMoneyline(cachedMoneyline!.away, cachedMoneyline!.home));
+  if (cached && cachedIsSafe && (!refresh || cacheFresh)) {
     return NextResponse.json({ ...cached.payload, cached: true });
   }
 
@@ -164,7 +181,7 @@ export async function GET(req: Request) {
   const params = new URLSearchParams({ apiKey, regions: "us", markets: "h2h,spreads,totals", oddsFormat: "decimal", dateFormat: "iso", commenceTimeFrom: range.start, commenceTimeTo: range.end });
 
   try {
-    const response = await fetch(`https://api.the-odds-api.com/v4/sports/baseball_kbo/odds?${params.toString()}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+    const response = await fetch(`https://api.the-odds-api.com/v4/sports/baseball_kbo/odds?${params.toString()}`, { next: { revalidate: 21600 }, signal: AbortSignal.timeout(15000) });
     const remaining = response.headers.get("x-requests-remaining");
     const used = response.headers.get("x-requests-used");
 
@@ -198,6 +215,20 @@ export async function GET(req: Request) {
       return NextResponse.json(payload);
     }
 
+    if (isStarted(event.commence_time)) {
+      const payload: MarketResponse = {
+        success: false,
+        status: "unavailable",
+        message: "경기가 이미 시작되어 경기 중 배당은 경기 전 분석에서 제외했습니다.",
+        commenceTime: event.commence_time,
+        remaining,
+        used,
+        market: null,
+      };
+      await writeCache(keyValue, payload, 1800);
+      return NextResponse.json(payload);
+    }
+
     const awayApi = event.away_team ?? requestedAway;
     const homeApi = event.home_team ?? requestedHome;
     const { selected, usable } = selectBookmaker(event, awayApi, homeApi);
@@ -216,16 +247,37 @@ export async function GET(req: Request) {
     const homeSpread = outcome(spreads, homeApi);
     const over = totalOutcome(totals, "Over");
     const under = totalOutcome(totals, "Under");
-    const moneyline = positiveNumber(awayMoney) && positiveNumber(homeMoney) ? { away: awayMoney, home: homeMoney } : null;
+    const moneyline =
+      positiveNumber(awayMoney) &&
+      positiveNumber(homeMoney) &&
+      isReasonablePregameMoneyline(awayMoney, homeMoney)
+        ? { away: awayMoney, home: homeMoney }
+        : null;
     const handicap = finiteNumber(homeSpread?.point) && positiveNumber(awaySpread?.price) && positiveNumber(homeSpread?.price) ? { line: homeSpread.point, away: awaySpread.price, home: homeSpread.price } : null;
-    const total = finiteNumber(over?.point) && positiveNumber(over.price) && positiveNumber(under?.price) ? { line: over.point, under: under.price, over: over.price } : null;
+    const total = finiteNumber(over?.point) && over.point >= 4.5 && over.point <= 15.5 && positiveNumber(over.price) && positiveNumber(under?.price) ? { line: over.point, under: under.price, over: over.price } : null;
     const lastUpdate = [selected.last_update, h2h?.last_update, spreads?.last_update, totals?.last_update].filter((value): value is string => Boolean(value)).sort().at(-1);
+
+    if (!moneyline) {
+      const payload: MarketResponse = {
+        success: false,
+        status: "unavailable",
+        message: "실시간 배당이거나 비정상 범위의 배당이라 경기 전 분석에서 제외했습니다.",
+        commenceTime: event.commence_time,
+        remaining,
+        used,
+        market: null,
+      };
+      await writeCache(keyValue, payload, 1800);
+      return NextResponse.json(payload);
+    }
 
     const payload: MarketResponse = {
       success: true,
       status: "received",
       bookmaker: selected.title ?? selected.key ?? "Sportsbook",
       bookmakerCount: usable.length,
+      commenceTime: event.commence_time,
+      pregameSnapshot: true,
       lastUpdate,
       remaining,
       used,

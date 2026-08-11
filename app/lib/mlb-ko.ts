@@ -31,6 +31,13 @@ export const MLB_TEAM_KO_BY_EN: Record<string, string> = {
 };
 
 const PLAYER_NAME_KO: Record<string, string> = {
+  "Christian Scott": "크리스티안 스콧", "Bryce Elder": "브라이스 엘더",
+  "Trevor Rogers": "트레버 로저스", "Dean Kremer": "딘 크레머",
+  "Andrew Painter": "앤드루 페인터", "Hunter Dobbins": "헌터 도빈스",
+  "Gabriel Hughes": "게이브리얼 휴스", "Michael Soroka": "마이클 소로카",
+  "Logan Henderson": "로건 헨더슨", "Casey Mize": "케이시 마이즈",
+  "Hayden Wesneski": "헤이든 웨스네스키", "Blade Tidwell": "블레이드 티드웰",
+  "Noah Cameron": "노아 캐머런", "Jacob Lopez": "제이콥 로페스",
   "Tomoyuki Sugano": "스가노 도모유키", "Shane Drohan": "셰인 드로한", "Simeon Drohan": "셰인 드로한",
   "Joe Ryan": "조 라이언", "Tanner Bibee": "태너 바이비", "Sean Burke": "션 버크",
   "Trey Yesavage": "트레이 예세비지", "Shohei Ohtani": "오타니 쇼헤이",
@@ -75,6 +82,19 @@ const FIRST: Record<string, string> = {
   steven:"스티븐", stephen:"스티븐", tommy:"토미", triston:"트리스턴", walker:"워커", will:"윌",
   william:"윌리엄", zach:"잭", zack:"잭", zachary:"재커리", bailey:"베일리", blake:"블레이크",
   corbin:"코빈", dylan:"딜런", framber:"프람버", kodai:"고다이", kenta:"겐타", yusei:"유세이",
+  aj:"A.J.", abner:"애브너", adrian:"아드리안", alan:"앨런", albert:"알버트", aroldis:"아롤디스",
+  ben:"벤", bradgley:"브래즐리", brady:"브래디", brandyn:"브랜든", brayan:"브라얀", braydon:"브레이든",
+  brendon:"브렌던", brennan:"브레넌", brent:"브렌트", brett:"브렛", brooks:"브룩스",
+  cal:"칼", caleb:"케일럽", cam:"캠", carson:"카슨", casey:"케이시", chad:"채드", chase:"체이스",
+  daniel:"대니얼", danny:"대니", didier:"디디에르", easton:"이스턴", edgardo:"에드가르도", edwin:"에드윈",
+  elvis:"엘비스", enyel:"에니엘", gerardo:"헤라르도", gordon:"고든", grant:"그랜트", hogan:"호건",
+  jt:"J.T.", dl:"D.L.", jason:"제이슨", jeff:"제프", jeremiah:"제러마이아", jhoan:"조안", jimmy:"지미", jonathan:"조나단", jordan:"조던",
+  jovani:"조바니", keaton:"키턴", kody:"코디", lazaro:"라자로", louis:"루이", lucas:"루카스", luke:"루크",
+  lyon:"라이언", mason:"메이슨", orion:"오리온", parker:"파커", peyton:"페이튼",
+  raisel:"라이셀", raymond:"레이먼드", reiver:"레이버", rico:"리코", riley:"라일리", robby:"로비",
+  sam:"샘", samy:"새미", scott:"스콧", shaun:"숀", simeon:"시미언", tayler:"테일러", taylor:"테일러",
+  tim:"팀", travis:"트래비스", trent:"트렌트", trevor:"트레버", tyron:"타이론", victor:"빅터",
+  xzavion:"재비언", yaramil:"야라밀", yoendrys:"요엔드리스", yuki:"유키",
 };
 
 const LAST: Record<string, string> = {
@@ -90,6 +110,30 @@ const LAST: Record<string, string> = {
   kimbrel:"킴브럴", jansen:"잰슨", hader:"헤이더", clase:"클라세", helsley:"헬슬리", cole:"콜",
   kershaw:"커쇼", scherzer:"슈어저", verlander:"벌랜더", burnes:"번스", ragans:"레이건스", lugo:"루고",
   rodon:"로돈", cortes:"코르테스", eovaldi:"이볼디", degrom:"디그롬", kelly:"켈리", sugano:"스가노", drohan:"드로한",
+  minter:"민터", blubaugh:"블루바우", ashby:"애슈비", uribe:"우리베", morejon:"모레혼", rangel:"랑헬",
+  surez:"수아레스", hoppe:"호페", lange:"랭", vesia:"베시아", kittredge:"키트리지",
+  morris:"모리스", chapman:"채프먼", joyce:"조이스", weiman:"와이먼", basso:"바소",
+  bello:"베요", fisher:"피셔", little:"리틀", bernardino:"베르나르디노", suter:"수터",
+  kerry:"케리", raley:"레일리", baker:"베이커", quantrill:"콴트릴", ferguson:"퍼거슨",
+  kilian:"킬리언", booser:"부저", sanders:"샌더스", seymour:"시모어", legumina:"레구미나", patrick:"패트릭",
+  shugart:"슈가트", silseth:"실세스", roycroft:"로이크로프트", winn:"윈", hall:"홀", duarte:"두아르테",
+  young:"영", fuentes:"푸엔테스", dodd:"도드", mcgee:"맥기", henriquez:"엔리케스", diaz:"디아스", daz:"디아스",
+  alvarado:"알바라도", santos:"산토스", phillips:"필립스", cleavinger:"클리빙어", whitlock:"위틀록",
+  soriano:"소리아노", carrillo:"카리요", graceffo:"그라세포", wolfram:"울프럼", harris:"해리스",
+  brubaker:"브루베이커", dreyer:"드라이어", weisenburger:"와이젠버거", latz:"래츠", foley:"폴리", hoffman:"호프먼",
+  estrada:"에스트라다", duran:"듀란", herget:"허겟", schreiber:"슈라이버", bowlan:"볼런",
+  loaisiga:"로아이시가", loisiga:"로아이시가", pintaro:"핀타로", montgomery:"몽고메리", romano:"로마노", cuas:"쿠아스", rojas:"로하스",
+  walker:"워커", fermin:"페르민", moran:"모란", morn:"모란", mejia:"메히아", bruihl:"브루일", slaten:"슬레이튼",
+  ginkel:"긴켈", funderburk:"펀더버크", hart:"하트", hurt:"허트", varland:"발랜드", erceg:"어섹",
+  gastelum:"가스텔룸", medina:"메디나", torrens:"토렌스", murphy:"머피", richardson:"리처드슨", fluharty:"플루하티",
+  lavender:"라벤더", pearson:"피어슨", frasso:"프라소", kerkering:"커커링", mushinski:"무신스키", strzelecki:"스트젤레키",
+  iglesias:"이글레시아스", burgos:"부르고스", sanmartin:"산마르틴", obrien:"오브라이언", ahlstrom:"알스트롬",
+  watson:"왓슨", hentges:"헨지스", natera:"나테라", blewett:"블루잇", woods:"우즈", waldron:"월드론",
+  miles:"마일스", cruz:"크루즈", matz:"마츠", okert:"오커트", gordon:"고든", saucedo:"사우세도",
+  clarke:"클라크", rogers:"로저스", mayza:"메이자", nance:"낸스", adams:"애덤스", megill:"메길",
+  alexander:"알렉산더", heineman:"하이네만", kinley:"킨리", wells:"웰스", guerrero:"게레로", mederos:"메데로스",
+  curry:"커리", hiraldo:"히랄도", gomez:"고메스", gmez:"고메스", matsui:"마쓰이", agnos:"아그노스", littell:"리텔",
+  de:"데", los:"로스", jr:"주니어", jos:"호세", hernndez:"에르난데스", "o'brien":"오브라이언", senga:"센가",
 };
 
 export function teamNameKo(name: string, id?: number) {
@@ -105,7 +149,37 @@ export function playerNameKo(name: string) {
     const key = part.toLowerCase().replace(/[^a-z'-]/g, "");
     return PLAYER_NAME_KO[part] ?? (index === 0 ? FIRST[key] : LAST[key]) ?? part;
   });
-  return mapped.join(" ");
+  return mapped.map((part) => /[A-Za-z]/.test(part) ? fallbackPlayerTokenKo(part) : part).join(" ");
+}
+
+// MLB 전체 선수 명단은 매일 바뀌므로 사전에 없는 이름도 영문 그대로 노출하지 않는다.
+// 자주 쓰이는 음절을 먼저 치환하고 남은 알파벳까지 한글 음가로 바꾼다.
+function fallbackPlayerTokenKo(value: string) {
+  const chunks: Array<[string, string]> = [
+    ["sch", "스"], ["tch", "치"], ["dge", "지"], ["tion", "션"], ["sion", "전"],
+    ["ch", "치"], ["sh", "시"], ["th", "스"], ["ph", "프"], ["wh", "우"],
+    ["ck", "크"], ["qu", "퀴"], ["ng", "응"], ["son", "슨"], ["ton", "턴"],
+    ["man", "먼"], ["ley", "리"], ["ney", "니"], ["er", "어"], ["or", "어"],
+    ["ar", "아"], ["ez", "에스"], ["es", "에스"], ["ll", "ㄹ"], ["rr", "ㄹ"],
+  ];
+  let source = value.toLowerCase().replace(/[^a-z'-]/g, "");
+  let result = "";
+  const letters: Record<string, string> = {
+    a:"아",b:"브",c:"크",d:"드",e:"에",f:"프",g:"그",h:"흐",i:"이",j:"지",k:"크",l:"르",m:"므",
+    n:"느",o:"오",p:"프",q:"크",r:"르",s:"스",t:"트",u:"우",v:"브",w:"우",x:"크스",y:"이",z:"즈",
+    "-":"-", "'":"",
+  };
+  while (source) {
+    const chunk = chunks.find(([roman]) => source.startsWith(roman));
+    if (chunk) {
+      result += chunk[1];
+      source = source.slice(chunk[0].length);
+    } else {
+      result += letters[source[0]] ?? "";
+      source = source.slice(1);
+    }
+  }
+  return result || value;
 }
 
 export const MLB_VENUE_KO: Record<string, string> = {

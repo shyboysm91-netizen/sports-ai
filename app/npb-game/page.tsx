@@ -29,7 +29,7 @@ export async function generateMetadata({
   const date = valueOf(params.date, "");
   const matchup = `${away} vs ${home}`;
   const dateText = date ? ` ${date}` : "";
-  const title = `${matchup}${dateText} NPB AI 분석 및 승부예측`;
+  const title = `${matchup}${dateText} NPB 경기 데이터 분석`;
   const description = `${matchup} NPB 경기의 선발투수, 최근 10경기, 맞대결, 팀 타격·투수 기록과 AI 승리 확률 및 예상 스코어를 확인하세요.`;
   const query = canonicalQuery(params);
   const canonical = `${BASE_URL}/npb-game${query ? `?${query}` : ""}`;

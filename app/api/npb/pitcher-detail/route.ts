@@ -519,6 +519,17 @@ async function getText(url: string, revalidate: number) {
   return response.ok ? response.text() : "";
 }
 
+async function resolvePlayerCode(teamCode: string, originalName: string) {
+  if (!teamCode || !originalName) return "";
+  const html = await getText(`https://npb.jp/bis/eng/teams/rst_${teamCode}.html`, 21600);
+  if (!html) return "";
+  for (const match of html.matchAll(/<a\b[^>]*href=["'][^"']*\/players\/(\d+)\.html[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const rosterName = cleanHtml(match[2]);
+    if (samePitcher(rosterName, originalName)) return match[1];
+  }
+  return "";
+}
+
 async function appearanceFromGame(game: GameLink, originalName: string, koName: string, playerCode = ""): Promise<Appearance | null> {
   // 새 NPB 공식 score 페이지는 playerCode와 투구수를 같은 투수표에 제공한다.
   const scoreHtml = game.scoreUrl ? await getText(game.scoreUrl, 21600) : "";
@@ -620,7 +631,7 @@ export async function GET(request: Request) {
   const opponent = findTeam(query.get("opponent") || "");
   const originalName = query.get("originalName") || query.get("pitcher") || "";
   const koName = query.get("name") || playerNameKo(originalName);
-  const playerCode = query.get("playerCode") || "";
+  const requestedPlayerCode = query.get("playerCode") || "";
   const stadium = query.get("stadium") || "";
   const endText = query.get("date") || kstDate(new Date());
 
@@ -629,8 +640,14 @@ export async function GET(request: Request) {
   }
 
   try {
+    // 이전 분석 캐시에 선수 코드가 없더라도 팀 공식 로스터에서 즉시 복구한다.
+    const playerCode = requestedPlayerCode || await resolvePlayerCode(team.code, originalName);
     const end = new Date(`${endText}T12:00:00+09:00`);
-    const dates = Array.from({ length: 140 }, (_, index) => {
+    const requestedLookback = Number(query.get("lookback"));
+    const lookbackDays = Number.isFinite(requestedLookback)
+      ? Math.min(140, Math.max(7, Math.round(requestedLookback)))
+      : 140;
+    const dates = Array.from({ length: lookbackDays }, (_, index) => {
       const target = new Date(end);
       target.setDate(target.getDate() - index - 1);
       return kstDate(target);

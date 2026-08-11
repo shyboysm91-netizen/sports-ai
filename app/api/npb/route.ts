@@ -38,6 +38,20 @@ function decodeHtml(value: string) {
 type OfficialStarter = { name: string; playerCode: string };
 
 const KNOWN_OFFICIAL_STARTERS: Record<string, Record<string, OfficialStarter>> = {
+  // 8/11 공식 선발. 당일 경기가 시작되면 NPB 예고 선발 페이지가 다음 날로
+  // 교체되므로, 확인된 값을 보존해 홈 카드가 다시 "선발 미정"으로 돌아가지 않게 한다.
+  "2026-08-11": {
+    Yomiuri: { name: "야마사키 이오리", playerCode: "" },
+    Hanshin: { name: "무라카미 쇼키", playerCode: "" },
+    Chunichi: { name: "오노 유다이", playerCode: "" },
+    DeNA: { name: "오가타 슈토", playerCode: "" },
+    "Nippon-Ham": { name: "이토 히로미", playerCode: "" },
+    Seibu: { name: "타이라 카이마", playerCode: "" },
+    Rakuten: { name: "쇼지 코세이", playerCode: "" },
+    ORIX: { name: "쿠리 아렌", playerCode: "" },
+    SoftBank: { name: "모이넬로", playerCode: "" },
+    Lotte: { name: "카와무라 토키토", playerCode: "" },
+  },
   // NPB 공식 예고 선발 페이지 확인값. 공식 페이지 파싱이 일시적으로 실패해도
   // 당일 경기 목록에서 선발 이름이 비어 보이지 않도록 안전망으로 사용합니다.
   "2026-07-26": {
@@ -221,6 +235,52 @@ async function loadOfficialStarters(date: string) {
   }
 }
 
+function starterCacheConfig() {
+  const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return { url, key };
+}
+
+function starterCacheKey(date: string) {
+  return `/api/npb/announced-starters?date=${date}`;
+}
+
+async function readStoredStarters(date: string) {
+  const result = new Map<string, OfficialStarter>();
+  const { url, key } = starterCacheConfig();
+  if (!url || !key) return result;
+  try {
+    const response = await fetch(`${url}/rest/v1/sports_cache?cache_key=eq.${encodeURIComponent(starterCacheKey(date))}&select=payload&limit=1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      cache: "no-store",
+    });
+    if (!response.ok) return result;
+    const rows = await response.json() as Array<{ payload?: { starters?: Array<{ team?: string; name?: string; playerCode?: string }> } }>;
+    for (const item of rows[0]?.payload?.starters ?? []) {
+      if (item.team && item.name) result.set(item.team, { name: item.name, playerCode: item.playerCode || "" });
+    }
+  } catch {}
+  return result;
+}
+
+async function storeStarters(date: string, starters: Map<string, OfficialStarter>) {
+  if (!starters.size) return;
+  const { url, key } = starterCacheConfig();
+  if (!url || !key) return;
+  const payload = { starters: [...starters].map(([team, starter]) => ({ team, ...starter })) };
+  await fetch(`${url}/rest/v1/sports_cache?on_conflict=cache_key`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      cache_key: starterCacheKey(date),
+      payload,
+      expires_at: new Date(Date.now() + 180 * 86400000).toISOString(),
+      updated_at: new Date().toISOString(),
+    }),
+    cache: "no-store",
+  }).catch(() => undefined);
+}
+
 const STADIUMS=["Jingu","Tokyo Dome","Yokohama","Vantelin Dome","Mazda Stadium","Koshien","MIZUHO PayPay","Mizuho PayPay","ES CON FIELD","Kyocera Dome","Rakuten Mobile","Belluna Dome","ZOZO Marine","Hotto Motto","Kurashiki","Matsuyama","Naha"];
 
 function clean(s:string){
@@ -274,8 +334,8 @@ function parseFinishedRows(html:string,date:string){
     const teams=[...row.matchAll(new RegExp(`\\b(${teamPattern})\\b`,"gi"))].map(m=>m[1]);
     const unique=teams.filter((team,index)=>teams.findIndex(t=>t.toLowerCase()===team.toLowerCase())===index);
     if(unique.length<2) continue;
-    const awayApi=teamNames.find(t=>t.toLowerCase()===unique[0].toLowerCase());
-    const homeApi=teamNames.find(t=>t.toLowerCase()===unique[1].toLowerCase());
+    const homeApi=teamNames.find(t=>t.toLowerCase()===unique[0].toLowerCase());
+    const awayApi=teamNames.find(t=>t.toLowerCase()===unique[1].toLowerCase());
     if(!awayApi||!homeApi||awayApi===homeApi) continue;
 
     const stadiumMatch=row.match(new RegExp(`(${stadiumPattern})`,"i"));
@@ -285,14 +345,14 @@ function parseFinishedRows(html:string,date:string){
     let awayScore:number|undefined;
     let homeScore:number|undefined;
     const directPatterns=[
-      new RegExp(`${escapeRe(awayApi)}\\s+(\\d{1,2})\\s*[-–—:]\\s*(\\d{1,2})\\s+${escapeRe(homeApi)}`,"i"),
-      new RegExp(`${escapeRe(awayApi)}\\s+(\\d{1,2})\\s+(?:Game\\s+\\d+\\s+)?(?:${stadiumPattern})?\\s*(\\d{1,2})\\s+${escapeRe(homeApi)}`,"i"),
-      new RegExp(`${escapeRe(awayApi)}[\\s\\S]*?\\b(\\d{1,2})\\b\\s*[-–—:]?\\s*\\b(\\d{1,2})\\b[\\s\\S]*?${escapeRe(homeApi)}`,"i"),
+      new RegExp(`${escapeRe(homeApi)}\\s+(\\d{1,2})\\s*[-–—:]\\s*(\\d{1,2})\\s+${escapeRe(awayApi)}`,"i"),
+      new RegExp(`${escapeRe(homeApi)}\\s+(\\d{1,2})\\s+(?:Game\\s+\\d+\\s+)?(?:${stadiumPattern})?\\s*(\\d{1,2})\\s+${escapeRe(awayApi)}`,"i"),
+      new RegExp(`${escapeRe(homeApi)}[\\s\\S]*?\\b(\\d{1,2})\\b\\s*[-–—:]?\\s*\\b(\\d{1,2})\\b[\\s\\S]*?${escapeRe(awayApi)}`,"i"),
     ];
     for(const pattern of directPatterns){
       const m=row.match(pattern);
       if(m){
-        const a=Number(m[1]),h=Number(m[2]);
+        const h=Number(m[1]),a=Number(m[2]);
         if(a<=30&&h<=30){awayScore=a;homeScore=h;break;}
       }
     }
@@ -302,9 +362,9 @@ function parseFinishedRows(html:string,date:string){
       const cells=(rawRow.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi)??[]).map(clean);
       const awayIndex=cells.findIndex(c=>new RegExp(`\\b${escapeRe(awayApi)}\\b`,"i").test(c));
       const homeIndex=cells.findIndex(c=>new RegExp(`\\b${escapeRe(homeApi)}\\b`,"i").test(c));
-      if(awayIndex>=0&&homeIndex>awayIndex){
-        const between=cells.slice(awayIndex+1,homeIndex).filter(c=>/^\d{1,2}$/.test(c)).map(Number).filter(n=>n<=30);
-        if(between.length>=2){awayScore=between[0];homeScore=between[between.length-1];}
+      if(homeIndex>=0&&awayIndex>homeIndex){
+        const between=cells.slice(homeIndex+1,awayIndex).filter(c=>/^\d{1,2}$/.test(c)).map(Number).filter(n=>n<=30);
+        if(between.length>=2){homeScore=between[0];awayScore=between[between.length-1];}
       }
     }
 
@@ -428,10 +488,10 @@ export async function GET(req:Request){
   for(const match of text.matchAll(simpleScoreRe)){
     const first=match[1], firstScore=Number(match[2]), secondScore=Number(match[3]), second=match[4];
     if(first===second||firstScore>30||secondScore>30||(firstScore===0&&secondScore===0)) continue;
-    const key=`${first}-${second}-`;
-    if([...seen].some(v=>v.startsWith(`${first}-${second}-`))) continue;
+    const key=`${second}-${first}-`;
+    if([...seen].some(v=>v.startsWith(`${second}-${first}-`))) continue;
     seen.add(key);
-    games.push({league:"NPB",date,time:"",away:TEAMS[first],home:TEAMS[second],stadium:"",awayStarter:"",homeStarter:"",awayStarterCode:"",homeStarterCode:"",awayApiName:first,homeApiName:second,starterStatus:"finished",awayScore:firstScore,homeScore:secondScore,completed:true,status:"Final"});
+    games.push({league:"NPB",date,time:"",away:TEAMS[second],home:TEAMS[first],stadium:"",awayStarter:"",homeStarter:"",awayStarterCode:"",homeStarterCode:"",awayApiName:second,homeApiName:first,starterStatus:"finished",awayScore:secondScore,homeScore:firstScore,completed:true,status:"Final"});
   }
 
   // 종료 경기: "Yomiuri 3 Game 9 Tokyo Dome 1 Hiroshima" 형태
@@ -439,14 +499,14 @@ export async function GET(req:Request){
   for(const match of text.matchAll(scoreRe)){
     const first=match[1], firstScore=Number(match[2]), stadium=match[3], secondScore=Number(match[4]), second=match[5];
     if(first===second) continue;
-    const key=`${first}-${second}-${stadium}`;
-    if(seen.has(key) || [...seen].some((value)=>value.startsWith(`${first}-${second}-`))) continue;
+    const key=`${second}-${first}-${stadium}`;
+    if(seen.has(key) || [...seen].some((value)=>value.startsWith(`${second}-${first}-`))) continue;
     seen.add(key);
     games.push({
-      league:"NPB",date,time:"",away:TEAMS[first],home:TEAMS[second],stadium:jpStadium(stadium),
+      league:"NPB",date,time:"",away:TEAMS[second],home:TEAMS[first],stadium:jpStadium(stadium),
       awayStarter:"",homeStarter:"",awayStarterCode:"",homeStarterCode:"",
-      awayApiName:first,homeApiName:second,starterStatus:"finished",
-      awayScore:firstScore,homeScore:secondScore,completed:true,status:"Final",
+      awayApiName:second,homeApiName:first,starterStatus:"finished",
+      awayScore:secondScore,homeScore:firstScore,completed:true,status:"Final",
     });
   }
 
@@ -460,18 +520,28 @@ export async function GET(req:Request){
     seen.add(key);
     const chunk=text.slice(Math.max(0,(match.index??0)-240),(match.index??0)+match[0].length+240);
     games.push({
-      league:"NPB",date,time:tm,away:TEAMS[first],home:TEAMS[second],stadium:jpStadium(stadium),
-      awayStarter:starterFromChunk(chunk,first),homeStarter:starterFromChunk(chunk,second),
-      awayStarterCode:"",homeStarterCode:"",awayApiName:first,homeApiName:second,
+      // NPB 영문 일정은 `홈팀 - 구장 - 시간 - 원정팀` 순서다.
+      league:"NPB",date,time:tm,away:TEAMS[second],home:TEAMS[first],stadium:jpStadium(stadium),
+      awayStarter:starterFromChunk(chunk,second),homeStarter:starterFromChunk(chunk,first),
+      awayStarterCode:"",homeStarterCode:"",awayApiName:second,homeApiName:first,
       starterStatus:"not-announced",completed:false,status:"Scheduled",
     });
   }
 
-  const [espnResults, officialStarters] = await Promise.all([
+  const [espnResults, officialStarters, storedStarters] = await Promise.all([
     loadEspnResults(date),
     loadOfficialStarters(date).catch(() => new Map<string, OfficialStarter>()),
+    readStoredStarters(date),
   ]);
+  // 공식 페이지가 다음 날짜로 넘어간 뒤에도 이미 발표된 선발은 유지합니다.
+  for (const [team, starter] of storedStarters) {
+    if (!officialStarters.has(team)) officialStarters.set(team, starter);
+  }
+  void storeStarters(date, officialStarters);
   const mergedGames=mergeGameResults(games,espnResults).map((game:any) => {
+    if (date === "2026-08-11" && game.awayApiName === "Hiroshima" && game.homeApiName === "Yakult") {
+      return { ...game, status: "Canceled", starterStatus: "canceled" };
+    }
     if (game.completed) return game;
     const awayOfficial = officialStarterForGame(officialStarters, game, "away");
     const homeOfficial = officialStarterForGame(officialStarters, game, "home");

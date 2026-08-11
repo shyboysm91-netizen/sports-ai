@@ -22,7 +22,7 @@ export default function OpenGraphImage() {
       >
         <div style={{ fontSize: 30, fontWeight: 700, opacity: 0.8 }}>KBO · MLB · NPB</div>
         <div style={{ fontSize: 88, fontWeight: 900, marginTop: 20 }}>장군 AI</div>
-        <div style={{ fontSize: 42, marginTop: 24 }}>선발 · 최근 기록 · 맞대결 · AI 승부예측</div>
+        <div style={{ fontSize: 42, marginTop: 24 }}>선발 · 최근 기록 · 맞대결 · 데이터 분석</div>
       </div>
     ),
     size,

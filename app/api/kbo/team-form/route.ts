@@ -159,8 +159,9 @@ function parseNaverGames(payload: unknown, fallbackDate: string): ParsedGame[] {
     const homeScore = pickNumber(homeObj, ["score", "teamScore", "run", "runs", "point", "points"])
       ?? pickNumber(obj, ["homeScore", "homeTeamScore", "scoreHome"]);
 
-    // 완료 경기만 집계합니다. 아직 점수가 없는 예정 경기는 제외합니다.
+    // 완료 경기만 집계합니다. 취소·연기 경기가 0:0으로 내려오는 경우도 제외합니다.
     if (awayScore === null || homeScore === null) continue;
+    if (awayScore === 0 && homeScore === 0) continue;
 
     const status = pick(obj, ["status", "gameStatus", "state", "statusCode", "gameStatusCode"]).toLowerCase();
     if (/cancel|취소|postpone|연기|suspend/.test(status)) continue;
@@ -352,6 +353,8 @@ export async function GET(request: Request) {
       .flat()
       .filter((game) => game.date >= regularSeasonFloor)
       .filter((game) => !/시범|연습|exhibition|preseason|spring/i.test(game.phase || ""))
+      // 공급처가 취소·연기·미진행 경기를 0:0으로 반환하는 경우 최근 경기에서 제외합니다.
+      .filter((game) => !(game.awayScore === 0 && game.homeScore === 0))
       .filter((game) => game.date < date)
       .filter((game, index, array) => array.findIndex((item) =>
         `${item.date}-${item.awayCode}-${item.homeCode}-${item.awayScore}-${item.homeScore}` ===

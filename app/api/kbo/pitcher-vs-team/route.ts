@@ -734,7 +734,7 @@ async function enrichRecentDetails(summary: RecentPitchingSummary | null, team: 
   const teamFormByDate = new Map<string, { opponent: string; homeAway: string }>();
   try {
     const response = await fetch(
-      `${origin}/api/kbo/team-form?team=${encodeURIComponent(team)}&opponent=${encodeURIComponent(opponentCode || team)}&date=${encodeURIComponent(requestDate)}&starterScheduleVersion=2`,
+      `${origin}/api/kbo/team-form?team=${encodeURIComponent(team)}&opponent=${encodeURIComponent(opponentCode || team)}&date=${encodeURIComponent(requestDate)}&starterScheduleVersion=2&completedOnly=1`,
       { cache: "no-store", headers: { Accept: "application/json" } },
     );
     if (response.ok) {

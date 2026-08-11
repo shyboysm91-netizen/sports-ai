@@ -55,7 +55,8 @@ export async function GET(request: Request) {
   }
 
   const origin = new URL(request.url).origin;
-  const dates = [kstDate(-2), kstDate(-1), kstDate(0), kstDate(1)];
+  const today = kstDate(0);
+  const dates = [kstDate(-2), kstDate(-1), today, kstDate(1)];
   const results: Array<{ path: string; ok: boolean; status: number }> = [];
   const indexNowUrls = new Set<string>([`${origin}/analysis`]);
 
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
       const home = game.home || "";
       if (!away || !home) continue;
       indexNowUrls.add(`${origin}/analysis/kbo/${encodeURIComponent(date)}/${encodeURIComponent(away)}-vs-${encodeURIComponent(home)}`);
-      results.push(await warm(origin, query("/api/betman", { date, away, home }), 1800));
+      if (date === today) results.push(await warm(origin, query("/api/betman", { date, away, home }), 1800));
     }
 
     for (const game of gameArray(schedules.NPB)) {
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
 
       results.push(await warm(origin, query("/api/npb/analysis", { away, home, date, awayStarter, homeStarter, stadium }), 900));
       if (stadium) results.push(await warm(origin, query("/api/npb/weather", { stadium, date }), 3600));
-      results.push(await warm(origin, query("/api/npb/market", { away, home, date }), 1800));
+      if (date === today) results.push(await warm(origin, query("/api/npb/market", { away, home, date }), 1800));
     }
 
     for (const game of gameArray(schedules.MLB)) {
@@ -104,7 +105,7 @@ export async function GET(request: Request) {
       const home = game.homeApi || game.home || "";
       if (!away || !home) continue;
       indexNowUrls.add(`${origin}/analysis/mlb/${encodeURIComponent(date)}/${encodeURIComponent(away)}-vs-${encodeURIComponent(home)}`);
-      results.push(await warm(origin, query("/api/mlb/market", {
+      if (date === today) results.push(await warm(origin, query("/api/mlb/market", {
         league: "MLB",
         date,
         away,

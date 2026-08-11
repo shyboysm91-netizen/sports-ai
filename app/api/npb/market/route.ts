@@ -365,10 +365,7 @@ export async function GET(req: Request) {
   const requestedAway = searchParams.get("away")?.trim() ?? "";
   const requestedHome = searchParams.get("home")?.trim() ?? "";
   const requestedCommenceTime = searchParams.get("commenceTime")?.trim() ?? "";
-  const sportKey =
-    searchParams.get("league")?.toUpperCase() === "MLB"
-      ? "baseball_mlb"
-      : "baseball_kbo";
+  const sportKey = "baseball_npb";
 
   if (!date || !requestedAway || !requestedHome) {
     return NextResponse.json<MarketResponse>(
@@ -410,7 +407,7 @@ export async function GET(req: Request) {
 
   const baseParams = new URLSearchParams({
     apiKey,
-    regions: "eu",
+    regions: "us",
     markets: "h2h,spreads,totals",
     oddsFormat: "decimal",
     dateFormat: "iso",

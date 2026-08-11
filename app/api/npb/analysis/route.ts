@@ -118,7 +118,14 @@ function starterCard(rotation:any[], requested:string, originalHint = "", player
     (originalHint && sameName(p.originalName??"",originalHint)) ||
     sameName(p.name??"",requestedKo)||sameName(p.originalName??"",requested)||sameName(p.originalName??"",requestedKo)
   )||null;
-  if(!pitcher) return null;
+  if(!pitcher) return {
+    name: requestedKo || requested,
+    requestedName: requestedKo || requested,
+    originalName: originalHint,
+    playerCode,
+    dataAvailable:false,
+    status:"공식 선발 확인 · 시즌 기록 없음",
+  };
   return {
     ...pitcher,
     name: requestedKo || pitcher.name,
@@ -159,14 +166,23 @@ export async function GET(req:Request){
   const [awayDetail,homeDetail]=fast
     ? [null,null]
     : await Promise.all([
-        awayBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}&playerCode=${encodeURIComponent(awayStarterCode||awayBase.playerCode||"")}`):Promise.resolve(null),
-        homeBase?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}&playerCode=${encodeURIComponent(homeStarterCode||homeBase.playerCode||"")}`):Promise.resolve(null),
+        awayBase?.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}&playerCode=${encodeURIComponent(awayStarterCode||awayBase.playerCode||"")}`):Promise.resolve(null),
+        homeBase?.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}&playerCode=${encodeURIComponent(homeStarterCode||homeBase.playerCode||"")}`):Promise.resolve(null),
       ]);
 
   const a:Standing|undefined=standings.standings?.find((x:Standing)=>x.team===away);
   const h:Standing|undefined=standings.standings?.find((x:Standing)=>x.team===home);
   const ab:Batting|undefined=awayBat.stats,hb:Batting|undefined=homeBat.stats;
   const ap:Pitching|undefined=awayPit.teamPitching,hp:Pitching|undefined=homePit.teamPitching;
+
+  const awayStarterFull=awayBase?{...awayBase,...(awayDetail?.success?awayDetail:{})}:null;
+  const homeStarterFull=homeBase?{...homeBase,...(homeDetail?.success?homeDetail:{})}:null;
+  const starterEdge=(()=>{
+    const ae=Number(awayStarterFull?.era),he=Number(homeStarterFull?.era);
+    const aw=Number(awayStarterFull?.whip),hw=Number(homeStarterFull?.whip);
+    if(!Number.isFinite(ae)||!Number.isFinite(he))return 0;
+    return ((ae-he)*2.2)+(Number.isFinite(aw)&&Number.isFinite(hw)?(aw-hw)*4:0);
+  })();
 
   const seasonEdge=((h?.winningPercentage??.5)-(a?.winningPercentage??.5))*34;
   const battingEdge=((hb?.ops??.65)-(ab?.ops??.65))*42;
@@ -176,26 +192,20 @@ export async function GET(req:Request){
   const h2hEdge=((h2h?.summary?.wins??0)-(h2h?.summary?.losses??0))*0.45;
   const homeAdv=3;
 
-  const homeProb=Math.round(clamp(50+seasonEdge+battingEdge+pitchingEdge+homeForm+recentEdge+h2hEdge+homeAdv,25,75));
+  const homeProb=Math.round(clamp(50+seasonEdge+battingEdge+pitchingEdge+starterEdge+homeForm+recentEdge+h2hEdge+homeAdv,25,75));
   const pick=homeProb>=50?home:away;
-  const confidence=Math.round(clamp(54+Math.abs(homeProb-50)*1.25,54,88));
+  const coverage=[a,h,ab,hb,ap,hp,awayRecent?.summary,homeRecent?.summary,awayStarterFull,homeStarterFull].filter(Boolean).length/10;
+  const confidence=Math.round(clamp(43+coverage*10+Math.abs(homeProb-50)*.6,45,68));
   const scores={
     season:Math.round(seasonEdge*10)/10,
     batting:Math.round(battingEdge*10)/10,
     pitching:Math.round(pitchingEdge*10)/10,
+    starter:Math.round(starterEdge*10)/10,
     homeAway:Math.round((homeForm+homeAdv)*10)/10,
     recent:Math.round(recentEdge*10)/10,
     headToHead:Math.round(h2hEdge*10)/10,
   };
 
-  const awayStarterFull=awayBase?{...awayBase,...(awayDetail?.success?awayDetail:{})}:null;
-  const homeStarterFull=homeBase?{...homeBase,...(homeDetail?.success?homeDetail:{})}:null;
-  const starterEdge=(()=>{
-    const ae=Number(awayStarterFull?.era),he=Number(homeStarterFull?.era);
-    const aw=Number(awayStarterFull?.whip),hw=Number(homeStarterFull?.whip);
-    if(!Number.isFinite(ae)||!Number.isFinite(he))return 0;
-    return ((ae-he)*2.2)+((aw-hw)*4);
-  })();
   const overallGap=Math.abs(homeProb-50);
   const scenario=homeProb>=50
     ? `${shortTeam(home)}는 홈 이점과 종합 지표 우위를 활용해 중반 이후 주도권을 잡는 시나리오가 가장 유력합니다. ${shortTeam(away)}가 승부를 뒤집으려면 선발이 최소 6이닝을 안정적으로 막고 초반 득점 지원을 받아야 합니다.`

@@ -103,7 +103,14 @@ async function kbo(siteUrl: string, game: ContentGame, date: string): Promise<Re
   const awayRecentSummary = awayForm?.recent10?.summary;
   const homeRecentSummary = homeForm?.recent10?.summary;
   const awayH2hSummary = awayForm?.headToHead?.summary;
-  const homeH2hSummary = homeForm?.headToHead?.summary;
+  // 맞대결은 같은 경기 집합이어야 하므로 원정팀 기준 응답 하나를 정본으로 사용합니다.
+  // 양쪽 API를 따로 쓰면 공급처 갱신 시점 차이로 서로 성립하지 않는 전적이 생길 수 있습니다.
+  const homeH2hSummary = awayH2hSummary ? {
+    games: awayH2hSummary.games,
+    wins: awayH2hSummary.losses,
+    losses: awayH2hSummary.wins,
+    draws: awayH2hSummary.draws,
+  } : homeForm?.headToHead?.summary;
 
   const normalizePitcher = (value: unknown) => String(value ?? "")
     .replace(/\([^)]*\)/g, "")
@@ -209,8 +216,8 @@ async function kbo(siteUrl: string, game: ContentGame, date: string): Promise<Re
   return {
     awayEra, homeEra,
     awayRecent: formText(awayRecentSummary), homeRecent: formText(homeRecentSummary),
-    awayH2h: awayH2hSummary ? `${safe(awayH2hSummary.wins)}승` : "자료 없음",
-    homeH2h: homeH2hSummary ? `${safe(homeH2hSummary.wins)}승` : "자료 없음",
+    awayH2h: formText(awayH2hSummary),
+    homeH2h: formText(homeH2hSummary),
     awayScore: String(awayScore), homeScore: String(homeScore), homeWinRate: String(homeProb),
     summary: `${winner} 우세입니다. 경기 상세 분석과 동일한 시즌 전력·최근 흐름·팀 OPS·선발 상대 성적·최근 득실점·맞대결 계산을 그대로 반영했습니다.`,
   };
@@ -232,7 +239,7 @@ async function npb(siteUrl: string, game: ContentGame, date: string): Promise<Re
   const homeEra = s(data?.homeStarterSeason?.era ?? data?.homeStarterDetail?.era);
   return {
     awayEra, homeEra, awayRecent: formText(awayRecent), homeRecent: formText(homeRecent),
-    awayH2h: h2h ? `${n(h2h.losses)}승` : "자료 없음", homeH2h: h2h ? `${n(h2h.wins)}승` : "자료 없음",
+    awayH2h: h2h ? `${n(h2h.losses)}승 ${n(h2h.wins)}패` : "자료 없음", homeH2h: h2h ? `${n(h2h.wins)}승 ${n(h2h.losses)}패` : "자료 없음",
     awayScore: String(awayScore), homeScore: String(homeScore), homeWinRate: String(homeProb),
     summary: s(data?.expertAnalysis?.finalOutlook?.text, `${data?.pick || (homeProb >= 50 ? game.home : game.away)} 우세로 분석됩니다.`),
   };
@@ -313,7 +320,7 @@ async function mlb(siteUrl: string, game: ContentGame, date: string): Promise<Re
   const homeEra = readEra(data?.homePitcher);
   return {
     awayEra, homeEra, awayRecent: formText(ar), homeRecent: formText(hr),
-    awayH2h: h2h ? `${n(h2h.awayWins)}승` : "자료 없음", homeH2h: h2h ? `${n(h2h.homeWins)}승` : "자료 없음",
+    awayH2h: h2h ? `${n(h2h.awayWins)}승 ${n(h2h.homeWins)}패` : "자료 없음", homeH2h: h2h ? `${n(h2h.homeWins)}승 ${n(h2h.awayWins)}패` : "자료 없음",
     awayScore: String(awayScore), homeScore: String(homeScore), homeWinRate: String(homeProb),
     summary: `${pick} 우세입니다. 경기 상세 분석과 동일한 시즌 승률·최근 10경기·선발 평균자책점·불펜 피로도·홈 이점 계산을 그대로 반영했습니다.`,
   };

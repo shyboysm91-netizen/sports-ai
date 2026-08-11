@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-type TeamPitcher = {
+export type TeamPitcher = {
   pcode: string;
   player: string;
   teamCode: string;
@@ -30,7 +30,7 @@ type TeamPitcher = {
   whip: number;
 };
 
-const TEAM_NAMES: Record<string, string> = {
+export const TEAM_NAMES: Record<string, string> = {
   KIA: "KIA 타이거즈",
   SAMSUNG: "삼성 라이온즈",
   LG: "LG 트윈스",
@@ -204,11 +204,25 @@ function parsePitchers(html: string, teamCode: string): TeamPitcher[] {
   return pitchers.sort((a, b) => b.inningsValue - a.inningsValue || a.era - b.era);
 }
 
-async function loadTeamPitchers(teamCode: string) {
+export async function loadTeamPitchers(teamCode: string) {
   const teamId = KBO_TEAM_IDS[teamCode];
   const html = await fetchPitcherPage(teamId);
   if (!html) throw new Error(`${TEAM_NAMES[teamCode]} 투수 기록 페이지를 받지 못했습니다.`);
   return parsePitchers(html, teamCode);
+}
+
+export async function loadAllTeamPitchers() {
+  const teamCodes = Object.keys(TEAM_NAMES);
+  const teams = await Promise.all(teamCodes.map(async (teamCode) => ({
+    teamCode,
+    team: TEAM_NAMES[teamCode],
+    pitchers: await loadTeamPitchers(teamCode),
+  })));
+
+  return {
+    teams,
+    pitchers: teams.flatMap((team) => team.pitchers),
+  };
 }
 
 export async function GET(request: Request) {

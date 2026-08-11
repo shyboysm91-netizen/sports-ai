@@ -201,7 +201,7 @@ export default function HomeClient({
             {league === "KBO"
               ? "기존 KBO 일정과 분석 기능을 그대로 제공합니다."
               : league === "MLB"
-                ? "MLB 팀 타격, 선발투수, 최근 경기, 상대전적, 불펜 피로도와 시장 배당을 분석합니다."
+                ? "MLB 팀 타격, 선발투수, 최근 경기, 상대전적과 불펜 피로도를 분석합니다."
                 : "NPB 공식 일정과 양대 리그 순위 데이터를 바탕으로 경기 전력을 분석합니다."}
           </p>
         </div>
@@ -298,7 +298,7 @@ export default function HomeClient({
                           {game.away}
                         </h3>
                         <p className="mt-2 text-sm font-bold text-slate-400">
-                          선발 {starterDisplayName(game.league, game.awayStarter)}
+                          {game.status === "Canceled" ? "경기 취소" : `선발 ${starterDisplayName(game.league, game.awayStarter)}`}
                         </p>
                       </div>
 
@@ -312,7 +312,7 @@ export default function HomeClient({
                           {game.home}
                         </h3>
                         <p className="mt-2 text-sm font-bold text-slate-400">
-                          선발 {starterDisplayName(game.league, game.homeStarter)}
+                          {game.status === "Canceled" ? "경기 취소" : `선발 ${starterDisplayName(game.league, game.homeStarter)}`}
                         </p>
                       </div>
                     </div>

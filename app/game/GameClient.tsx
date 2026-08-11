@@ -250,14 +250,23 @@ type Prediction = {
   homeWinProbability: number;
   awayScore: number;
   homeScore: number;
-  totalLine: number;
-  totalPick: "오버" | "언더";
+  totalLine: number | null;
+  totalPick: "오버" | "언더" | null;
   expectedTotal: number;
   winner: string;
   confidence: number;
   confidenceGrade: "A" | "B" | "C";
   factors: Array<{ label: string; away: number; home: number; weight: number }>;
   reasons: string[];
+};
+
+type RecommendationHistoryItem = {
+  at: string;
+  pick: string;
+  outlook: string;
+  awayRate: number;
+  homeRate: number;
+  reason: string;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -352,41 +361,25 @@ function makePrediction({
     0.15;
   const winner = homeProb >= awayProb ? homeName : awayName;
 
-  // 반올림 전 예상 득점 합계는 언더/오버 판단용으로 따로 보존합니다.
-  // 표시 스코어의 점수 차는 승률 차와 원래 득점 차를 함께 반영합니다.
+  // 승패 추천과 별개로 양 팀의 공격력·상대 선발 지표에서 예상 득점을 계산합니다.
+  // 추천 팀에 맞추기 위해 점수를 강제로 뒤집지 않습니다.
   const expectedTotal = Math.round((awayScoreRaw + homeScoreRaw) * 10) / 10;
-  const probabilityGap = Math.abs(homeProb - awayProb);
-  const rawScoreGap = Math.abs(homeScoreRaw - awayScoreRaw);
-  const targetMargin = clamp(
-    Math.round(probabilityGap * 10 + rawScoreGap * 0.55),
-    1,
-    5,
-  );
-  const displayedTotal = clamp(Math.round(expectedTotal), 3, 20);
+  let awayScore = clamp(Math.round(awayScoreRaw), 1, 10);
+  let homeScore = clamp(Math.round(homeScoreRaw), 1, 10);
 
-  let winnerScore = Math.round((displayedTotal + targetMargin) / 2);
-  let loserScore = displayedTotal - winnerScore;
-
-  if (loserScore < 1) {
-    loserScore = 1;
-    winnerScore = Math.min(10, Math.max(2, displayedTotal - loserScore));
+  // 승리 추천과 표시 스코어가 모순되지 않게 반올림으로 생긴 동점만 최소 보정합니다.
+  // 확률 차이가 작은 경기는 한 점 차 접전으로 유지합니다.
+  if (winner === awayName && awayScore <= homeScore) {
+    if (homeScore >= 10) homeScore = 9;
+    awayScore = homeScore + 1;
+  } else if (winner === homeName && homeScore <= awayScore) {
+    if (awayScore >= 10) awayScore = 9;
+    homeScore = awayScore + 1;
   }
 
-  winnerScore = clamp(winnerScore, 2, 10);
-  loserScore = clamp(loserScore, 1, 9);
-
-  let awayScore = winner === awayName ? winnerScore : loserScore;
-  let homeScore = winner === homeName ? winnerScore : loserScore;
-
-  // 반올림 과정에서 추천 팀이 뒤집히는 경우만 최소한으로 보정합니다.
-  if (winner === homeName && homeScore <= awayScore) {
-    homeScore = Math.min(10, awayScore + 1);
-  } else if (winner === awayName && awayScore <= homeScore) {
-    awayScore = Math.min(10, homeScore + 1);
-  }
-
-  const totalLine = 0;
-  const totalPick = expectedTotal >= 9 ? "오버" : "언더";
+  // 언더·오버는 실제 시장 기준점이 들어온 뒤 별도 시장 분석에서만 판단합니다.
+  const totalLine = null;
+  const totalPick = null;
 
   const signals = [
     Math.sign(homeSeason - awaySeason),
@@ -414,9 +407,9 @@ function makePrediction({
     ].filter(Boolean).length / 8;
   const confidence = Math.round(
     clamp(
-      52 + agreement * 20 + dataCoverage * 13 + Math.abs(homeProb - 0.5) * 30,
-      50,
-      88,
+      42 + agreement * 10 + dataCoverage * 9 + Math.abs(homeProb - 0.5) * 20,
+      45,
+      68,
     ),
   );
 
@@ -467,7 +460,7 @@ function makePrediction({
   }
 
   reasons.push(
-    `화면에 표시된 예상 스코어의 합계는 ${awayScore + homeScore}점입니다. 실제 언더오버 추천은 내부 예상치와 시장 기준점을 비교해 최소 1점 이상 차이가 날 때만 판단합니다.`,
+    `화면에 표시된 예상 스코어의 합계는 ${awayScore + homeScore}점입니다. 총점 방향은 내부 예상치와 공개 시장 기준점의 차이를 비교한 참고 지표입니다.`,
   );
   if (agreement < 0.67)
     reasons.push(
@@ -514,7 +507,7 @@ function makePrediction({
     { label: "홈 이점", away: 45, home: 58, weight: 5 },
   ];
   const confidenceGrade: "A" | "B" | "C" =
-    confidence >= 80 ? "A" : confidence >= 68 ? "B" : "C";
+    confidence >= 64 ? "A" : confidence >= 56 ? "B" : "C";
 
   return {
     awayWinProbability: Math.round(awayProb * 100),
@@ -536,6 +529,12 @@ type BetmanMarketResponse = {
   success: boolean;
   status: "received" | "unavailable" | "error";
   gmTs?: number;
+  bookmaker?: string;
+  bookmakerCount?: number;
+  commenceTime?: string;
+  pregameSnapshot?: boolean;
+  lastUpdate?: string;
+  cached?: boolean;
   message?: string;
   market: {
     moneyline: { away: number; home: number; draw?: number } | null;
@@ -563,6 +562,32 @@ type BetmanMarketResponse = {
     };
   } | null;
 };
+
+type KboBullpenResponse = {
+  success: boolean;
+  status: string;
+  latestGameDate?: string;
+  message?: string;
+  source?: string;
+  fatigue?: { score: number; label: string; yesterdayPitches: number; recent3DayPitches: number; heavyPitchers: number; consecutivePitchers: number } | null;
+  recent3Days?: Array<{ date: string; lines: Array<{ name: string; innings: string; pitches: number; battersFaced: number; consecutiveDays: number }> }>;
+};
+
+function KboBullpenMetric({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-slate-950 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 font-black">{value}</p></div>;
+}
+
+function KboBullpenCard({ team, data }: { team: string; data: KboBullpenResponse | null }) {
+  if (!data) return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center text-slate-400">불펜 기록을 불러오는 중입니다.</div>;
+  if (!data.success || !data.fatigue) return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6"><h3 className="text-xl font-black">{team} 불펜</h3><p className="mt-3 text-sm text-slate-500">{data.message || "최근 불펜 기록이 없습니다."}</p></div>;
+  const rows=(data.recent3Days??[]).flatMap(day=>day.lines.map(line=>({...line,date:day.date})));
+  return <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
+    <div className="flex items-end justify-between gap-3"><div><p className="text-sm font-black text-blue-400">{team} 불펜 피로도</p><h3 className="mt-2 text-xl font-black">{data.fatigue.label}</h3></div><p className="text-2xl font-black text-blue-400">{data.fatigue.score}점</p></div>
+    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4"><KboBullpenMetric label="최근 경기 투구" value={`${data.fatigue.yesterdayPitches}구`}/><KboBullpenMetric label="최근 3경기 투구" value={`${data.fatigue.recent3DayPitches}구`}/><KboBullpenMetric label="연투 투수" value={`${data.fatigue.consecutivePitchers}명`}/><KboBullpenMetric label="과부하 투수" value={`${data.fatigue.heavyPitchers}명`}/></div>
+    <div className="mt-5 overflow-hidden rounded-xl border border-slate-800"><div className="grid grid-cols-[62px_minmax(100px,1fr)_50px_62px_50px] bg-slate-950 px-3 py-2 text-center text-xs font-black text-slate-500"><span>날짜</span><span className="text-left">투수</span><span>이닝</span><span>투구 수</span><span>연투</span></div>{rows.length?rows.map((row,index)=><div key={`${row.date}-${row.name}-${index}`} className="grid grid-cols-[62px_minmax(100px,1fr)_50px_62px_50px] items-center border-t border-slate-800 px-3 py-3 text-center text-sm"><span className="text-slate-400">{row.date.slice(5)}</span><b className="truncate text-left">{row.name}</b><span>{row.innings}</span><span>{row.pitches}구</span><span className={row.consecutiveDays>=2?"font-black text-amber-400":"text-slate-400"}>{row.consecutiveDays>=2?`${row.consecutiveDays}일`:"-"}</span></div>):<p className="p-4 text-center text-sm text-slate-500">최근 3경기 불펜 등판 기록이 없습니다.</p>}</div>
+    <p className="mt-3 text-xs text-slate-500">출처: {data.source || "MyKBO Stats"} · 공개된 최근 등판 기록 기준</p>
+  </div>;
+}
 
 function AdvancedAnalysisSection({
   prediction,
@@ -684,8 +709,27 @@ function AdvancedAnalysisSection({
     });
   }, [betman, date, away, home, awayForm, homeForm]);
 
+  useEffect(() => {
+    const market = betman?.market?.moneyline;
+    if (!market) return;
+    let active = true;
+    fetch(
+      `/api/kbo/odds-performance?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&awayOdds=${market.away}&homeOdds=${market.home}`,
+      { cache: "no-store" },
+    )
+      .then((response) => response.json())
+      .then((data) => {
+        if (active && data?.success && data.away && data.home) {
+          setSameOdds({ away: data.away, home: data.home });
+        }
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [betman, away, home]);
+
   const moneyline = betman?.market?.moneyline;
-  const total = betman?.market?.total;
+  const rawTotal = betman?.market?.total;
+  const total = rawTotal && rawTotal.line >= 4.5 && rawTotal.line <= 15.5 ? rawTotal : null;
   const a = moneyline?.away ?? 0,
     h = moneyline?.home ?? 0;
   const marketAway = a > 1 && h > 1 ? (1 / a / (1 / a + 1 / h)) * 100 : null;
@@ -696,13 +740,7 @@ function AdvancedAnalysisSection({
     marketHome == null ? null : prediction.homeWinProbability - marketHome;
   const predictedTotal = prediction.expectedTotal;
   const displayedPredictedTotal = prediction.awayScore + prediction.homeScore;
-  const totalPick = total
-    ? predictedTotal >= total.line + 1
-      ? "오버"
-      : predictedTotal <= total.line - 1
-        ? "언더"
-        : "패스"
-    : null;
+  const totalPick = total ? (predictedTotal >= total.line ? "오버" : "언더") : null;
   const bestGap =
     awayGap == null || homeGap == null ? null : Math.max(awayGap, homeGap);
   const aiTeam =
@@ -752,7 +790,7 @@ function AdvancedAnalysisSection({
     selectedAiRate == null ||
     selectedMarketRate == null
       ? "현재 배당 정보를 불러오지 못해 AI 예상 승률과 배당을 비교하지 않았습니다."
-      : `현재 배당은 ${aiTeam}의 승리 가능성을 약 ${selectedMarketRate.toFixed(1)}%로 보고 있습니다. SPORTS AI는 ${selectedAiRate.toFixed(1)}%로 분석했습니다. AI가 배당보다 약 ${Math.abs(bestGap).toFixed(1)}% 더 높게 평가해 ${aiTeam} 승 쪽을 우선 검토했습니다.`;
+      : `현재 시장 환산 승률은 ${selectedMarketRate.toFixed(1)}%, AI 예상 승률은 ${selectedAiRate.toFixed(1)}%입니다. 모델은 ${aiTeam}을 시장 수치보다 약 ${Math.round(Math.abs(bestGap))}% 높게 평가했습니다.`;
   const weekdaySentence =
     awayWeekRate == null || homeWeekRate == null
       ? `${weekdayLabel} 경기 표본이 부족해 핵심 근거에서는 제외했습니다.`
@@ -764,10 +802,10 @@ function AdvancedAnalysisSection({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-black text-amber-400">
-              BETMAN LIVE MARKET
+              PUBLIC MARKET DATA
             </p>
             <h2 className="mt-2 text-2xl font-black">
-              베트맨 배당 · AI 확률 비교
+              공개 시장 수치 · AI 전망 비교
             </h2>
           </div>
           <span
@@ -776,7 +814,7 @@ function AdvancedAnalysisSection({
             {marketLoading
               ? "불러오는 중"
               : betman?.status === "received"
-                ? `자동 수신 완료 · ${betman.gmTs ?? ""}`
+                ? `경기 전 저장 배당 · ${betman.bookmaker ?? "배당사"}`
                 : "배당 미수신"}
           </span>
         </div>
@@ -786,7 +824,7 @@ function AdvancedAnalysisSection({
         </p>
         <div className="mt-6 grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl bg-slate-950 p-5">
-            <p className="text-xs text-slate-500">베트맨 승패 배당</p>
+            <p className="text-xs text-slate-500">실제 승패 배당</p>
             <p className="mt-3 font-black">
               {moneyline
                 ? `${away} ${moneyline.away.toFixed(2)} · ${home} ${moneyline.home.toFixed(2)}`
@@ -794,7 +832,7 @@ function AdvancedAnalysisSection({
             </p>
           </div>
           <div className="rounded-2xl bg-slate-950 p-5">
-            <p className="text-xs text-slate-500">배당 기준 승률</p>
+            <p className="text-xs text-slate-500">배당이 보는 승률</p>
             <p className="mt-3 font-black">
               {marketAway == null
                 ? "미수신"
@@ -802,25 +840,27 @@ function AdvancedAnalysisSection({
             </p>
           </div>
           <div className="rounded-2xl bg-slate-950 p-5">
-            <p className="text-xs text-slate-500">AI 확률 비교</p>
+            <p className="text-xs text-slate-500">AI 승률 · 배당 대비</p>
             <p className="mt-3 text-xl font-black text-amber-400">
-              {aiTeam ?? "-"}
+              {aiTeam && selectedAiRate != null ? `${aiTeam} ${selectedAiRate.toFixed(1)}%` : "-"}
             </p>
             <p className="mt-1 text-xs font-bold text-amber-300">
               {bestGap == null
                 ? "배당 미수신"
-                : `배당 기준과 ${Math.abs(bestGap).toFixed(1)}%p 차이`}
+                : `배당 승률보다 ${Math.round(Math.abs(bestGap))}% 높음`}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-950 p-5">
             <p className="text-xs text-slate-500">실제 U/O 기준</p>
             <p className="mt-3 text-xl font-black text-amber-400">
-              {total ? `${total.line} ${totalPick}` : "미수신"}
+              {total ? `${totalPick} 방향` : "기준점 확인 전"}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              언더 {total?.under?.toFixed(2) ?? "-"} · 오버{" "}
-              {total?.over?.toFixed(2) ?? "-"} · AI {displayedPredictedTotal}점
+              {total ? `시장 기준 ${total.line}점 · AI 예상 ${displayedPredictedTotal}점` : "실제 기준점 미수신"}
             </p>
+            {betman?.lastUpdate ? (
+              <p className="mt-1 text-[11px] text-slate-600">배당 갱신 {new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" }).format(new Date(betman.lastUpdate))}</p>
+            ) : null}
           </div>
         </div>
 
@@ -860,7 +900,7 @@ function AdvancedAnalysisSection({
                       </>
                     ) : (
                       <p className="mt-3 text-sm font-bold text-slate-500">
-                        아직 완료된 동일 배당 표본이 없습니다.
+                        서버에 저장된 완료 경기 표본이 아직 없습니다. 오늘부터 자동 누적됩니다.
                       </p>
                     )}
                   </div>
@@ -897,7 +937,7 @@ function AdvancedAnalysisSection({
             <p>• {marketSentence}</p>
             <p>• {weekdaySentence}</p>
             <p>
-              • 선발·타격·최근 득실점·맞대결·홈 이점을 함께 반영해 최종 픽을
+              • 선발·타격·최근 득실점·맞대결·홈 이점을 함께 반영해 최종 분석값을
               산출합니다.
             </p>
           </div>
@@ -939,16 +979,25 @@ function ExpertReportSection({
   const homeRecent = homeForm?.recent10.summary;
   const awayEra = awayStarter?.pitcher.era;
   const homeEra = homeStarter?.pitcher.era;
+  const awayComparisonEra = awayStarter?.opponentStats?.era ?? awayEra;
+  const homeComparisonEra = homeStarter?.opponentStats?.era ?? homeEra;
   const awayWhip = awayStarter?.pitcher.whip;
   const homeWhip = homeStarter?.pitcher.whip;
   const starterLeader =
-    Number.isFinite(awayEra) && Number.isFinite(homeEra)
-      ? Number(awayEra) <= Number(homeEra) ? away : home
+    Number.isFinite(awayComparisonEra) && Number.isFinite(homeComparisonEra)
+      ? Number(awayComparisonEra) <= Number(homeComparisonEra) ? away : home
       : "선발 정보 확인 필요";
   const offenseLeader =
     Number(awayBatting?.ops ?? 0) >= Number(homeBatting?.ops ?? 0) ? away : home;
-  const recentLeader =
-    Number(awayRecent?.wins ?? 0) >= Number(homeRecent?.wins ?? 0) ? away : home;
+  const awayRecentDecisions = Number(awayRecent?.wins ?? 0) + Number(awayRecent?.losses ?? 0);
+  const homeRecentDecisions = Number(homeRecent?.wins ?? 0) + Number(homeRecent?.losses ?? 0);
+  const awayRecentRate = awayRecentDecisions
+    ? Number(awayRecent?.wins ?? 0) / awayRecentDecisions
+    : 0.5;
+  const homeRecentRate = homeRecentDecisions
+    ? Number(homeRecent?.wins ?? 0) / homeRecentDecisions
+    : 0.5;
+  const recentLeader = awayRecentRate >= homeRecentRate ? away : home;
   const seasonLeader =
     Number(awayStanding?.winningPercentage ?? 0) >=
     Number(homeStanding?.winningPercentage ?? 0) ? away : home;
@@ -1033,12 +1082,38 @@ function PredictionSection({
   prediction,
   away,
   home,
+  awayStarter,
+  homeStarter,
+  awayForm,
+  homeForm,
 }: {
   prediction: Prediction;
   away: string;
   home: string;
+  awayStarter?: StarterData;
+  homeStarter?: StarterData;
+  awayForm: TeamFormResponse | null;
+  homeForm: TeamFormResponse | null;
 }) {
   const displayedPredictedTotal = prediction.awayScore + prediction.homeScore;
+  const probabilityGap = Math.abs(prediction.awayWinProbability - prediction.homeWinProbability);
+  const outlook = probabilityGap >= 14 ? "비교적 강한 우세" : probabilityGap >= 7 ? "근소 우세" : "접전 예상";
+  const startersConfirmed = Boolean(awayStarter && homeStarter);
+  const formsReady = Boolean(awayForm?.recent10.summary.games && homeForm?.recent10.summary.games);
+  const informationStatus = startersConfirmed && formsReady
+    ? "주요 데이터 반영 완료"
+    : startersConfirmed
+      ? "현재 정보 기준 전망"
+      : "선발 확정 후 변동 가능";
+  const keyFactors = [...prediction.factors]
+    .sort((a, b) => Math.abs(b.away - b.home) - Math.abs(a.away - a.home))
+    .slice(0, 3);
+  const risks = [
+    !startersConfirmed ? "양 팀 선발 정보가 모두 확정되지 않았습니다." : null,
+    !formsReady ? "최근 완료 경기 표본이 충분하지 않습니다." : null,
+    probabilityGap < 7 ? "양 팀 우세도 차이가 작아 한두 번의 득점권 상황으로 결과가 바뀔 수 있습니다." : null,
+    "경기 직전 라인업 변경과 핵심 선수 결장은 반영 시점에 따라 달라질 수 있습니다.",
+  ].filter((item): item is string => Boolean(item));
 
   return (
     <section className="mt-10 rounded-3xl border border-blue-800 bg-gradient-to-br from-blue-950/50 to-slate-900 p-6 md:p-8">
@@ -1048,8 +1123,9 @@ function PredictionSection({
             SPORTS AI 종합 예측
           </p>
           <h2 className="mt-2 text-2xl font-black">
-            {prediction.winner} 승 추천
+            {prediction.winner} {outlook}
           </h2>
+          <p className="mt-2 text-sm font-bold text-slate-300">{informationStatus}</p>
         </div>
         <span className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black">
           신뢰도 {prediction.confidence}%
@@ -1057,7 +1133,7 @@ function PredictionSection({
       </div>
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl bg-slate-950 p-5">
-          <p className="text-xs text-slate-500">승리 확률</p>
+          <p className="text-xs text-slate-500">상대 우세도</p>
           <div className="mt-4 flex justify-between font-black">
             <span>
               {away} {prediction.awayWinProbability}%
@@ -1092,7 +1168,7 @@ function PredictionSection({
             {displayedPredictedTotal}점
           </p>
           <p className="mt-2 text-xs text-slate-500">
-            실제 언더/오버 추천은 아래 시장 기준점과 비교
+            공개 시장 기준점과 비교한 참고 예상치
           </p>
         </div>
       </div>
@@ -1139,6 +1215,23 @@ function PredictionSection({
             {prediction.reasons.map((reason) => (
               <p key={reason}>• {reason}</p>
             ))}
+          </div>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-blue-900/60 bg-blue-950/20 p-5">
+          <p className="font-black text-blue-300">추천을 만든 핵심 근거</p>
+          <div className="mt-3 space-y-2 text-sm text-slate-200">
+            {keyFactors.map((factor, index) => {
+              const leader = factor.away >= factor.home ? away : home;
+              return <p key={factor.label}>{index + 1}. {factor.label} · {leader} 우세</p>;
+            })}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-amber-900/60 bg-amber-950/10 p-5">
+          <p className="font-black text-amber-300">경기 전 확인할 변수</p>
+          <div className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
+            {risks.map((risk) => <p key={risk}>• {risk}</p>)}
           </div>
         </div>
       </div>
@@ -1924,6 +2017,13 @@ function FormSummaryCard({
   teamName: string;
   section?: TeamFormSection;
 }) {
+  const recent5 = section?.games.slice(0, 5) ?? [];
+  const recent5Wins = recent5.filter((game) => game.result === "승").length;
+  const recent5Losses = recent5.filter((game) => game.result === "패").length;
+  const recent5Draws = recent5.filter((game) => game.result === "무").length;
+  const recent5Runs = recent5.reduce((sum, game) => sum + game.teamScore, 0);
+  const recent5Allowed = recent5.reduce((sum, game) => sum + game.opponentScore, 0);
+
   return (
     <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
       <p className="text-sm font-black text-blue-400">{title}</p>
@@ -1973,6 +2073,14 @@ function FormSummaryCard({
                 {section.summary.averageRunsAllowed.toFixed(2)}
               </p>
             </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-blue-900/50 bg-blue-950/20 p-4">
+            <p className="text-xs font-black text-blue-300">최근 5경기 흐름</p>
+            <p className="mt-2 font-black">
+              {recent5Wins}승 {recent5Losses}패{recent5Draws > 0 ? ` ${recent5Draws}무` : ""}
+              <span className="ml-2 text-sm text-slate-400">{recent5Runs}득점 / {recent5Allowed}실점</span>
+            </p>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
@@ -2111,13 +2219,18 @@ function HeadToHeadComparison({
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-      <h3 className="text-xl font-black">최근 맞대결 {games.length}경기</h3>
-      <p className="mt-2 text-sm font-black">
-        <span className="text-red-400">{awayName} {awayWins}승</span>
-        <span className="text-slate-500"> · </span>
-        <span className="text-blue-400">{homeName} {homeWins}승</span>
-        {draws > 0 ? <span className="text-slate-400"> · {draws}무</span> : null}
-      </p>
+      <p className="text-xs font-black text-blue-400">최근 맞대결 {games.length}경기 기준</p>
+      <h3 className="mt-1 text-xl font-black">{awayName} vs {homeName} 맞대결</h3>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-xl border border-red-900/50 bg-red-950/20 px-4 py-3">
+          <p className="font-black text-red-400">{awayName}</p>
+          <p className="mt-1 text-lg font-black">{awayWins}승 {homeWins}패{draws > 0 ? ` ${draws}무` : ""}</p>
+        </div>
+        <div className="rounded-xl border border-blue-900/50 bg-blue-950/20 px-4 py-3">
+          <p className="font-black text-blue-400">{homeName}</p>
+          <p className="mt-1 text-lg font-black">{homeWins}승 {awayWins}패{draws > 0 ? ` ${draws}무` : ""}</p>
+        </div>
+      </div>
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-800">
         {games.length ? games.slice(0, 10).map((game, index) => {
           const isAwayHome = game.location === "홈";
@@ -2140,6 +2253,9 @@ function HeadToHeadComparison({
           );
         }) : <p className="p-5 text-center text-sm text-slate-500">최근 맞대결 기록이 없습니다.</p>}
       </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">
+        이번 시즌 최근 맞대결 기준입니다. 당시 선발투수와 현재 라인업은 다를 수 있어 보조 지표로 확인하세요.
+      </p>
     </section>
   );
 }
@@ -2191,6 +2307,11 @@ function GameDetailContent() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [activeTab, setActiveTab] = useState("종합");
+  const [awayBullpen, setAwayBullpen] = useState<KboBullpenResponse | null>(null);
+  const [homeBullpen, setHomeBullpen] = useState<KboBullpenResponse | null>(null);
+  const [analysisUpdatedAt, setAnalysisUpdatedAt] = useState("");
+  const [recommendationHistory, setRecommendationHistory] = useState<RecommendationHistoryItem[]>([]);
+  const [favorite, setFavorite] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2241,7 +2362,7 @@ function GameDetailContent() {
               awayCode,
             )}&opponent=${encodeURIComponent(
               homeCode,
-            )}&date=${encodeURIComponent(date)}`, 600),
+            )}&date=${encodeURIComponent(date)}&completedOnly=1`, 600),
             {
               cache: "no-store",
               signal: controller.signal,
@@ -2253,7 +2374,7 @@ function GameDetailContent() {
               homeCode,
             )}&opponent=${encodeURIComponent(
               awayCode,
-            )}&date=${encodeURIComponent(date)}`, 600),
+            )}&date=${encodeURIComponent(date)}&completedOnly=1`, 600),
             {
               cache: "no-store",
               signal: controller.signal,
@@ -2494,6 +2615,7 @@ function GameDetailContent() {
         setBatting(battingData.batting ?? []);
         setAwayForm(awayFormData);
         setHomeForm(homeFormData);
+        setAnalysisUpdatedAt(new Date().toISOString());
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
           return;
@@ -2518,6 +2640,19 @@ function GameDetailContent() {
     return () => controller.abort();
   }, [away, home, date]);
 
+  useEffect(() => {
+    if (activeTab !== "불펜") return;
+    const controller = new AbortController();
+    const awayCode = TEAM_CODES[away];
+    const homeCode = TEAM_CODES[home];
+    if (!awayCode || !homeCode) return;
+    Promise.all([
+      fetch(dataCacheUrl(`/api/kbo/bullpen-fatigue?team=${encodeURIComponent(awayCode)}&date=${encodeURIComponent(date)}&version=2`, 600), { cache: "no-store", signal: controller.signal }).then(r=>r.json()),
+      fetch(dataCacheUrl(`/api/kbo/bullpen-fatigue?team=${encodeURIComponent(homeCode)}&date=${encodeURIComponent(date)}&version=2`, 600), { cache: "no-store", signal: controller.signal }).then(r=>r.json()),
+    ]).then(([awayData,homeData])=>{if(!controller.signal.aborted){setAwayBullpen(awayData);setHomeBullpen(homeData);}}).catch(()=>{});
+    return ()=>controller.abort();
+  }, [activeTab, away, home, date]);
+
   const awayStanding = standings.find((item) => item.team === away);
 
   const homeStanding = standings.find((item) => item.team === home);
@@ -2538,6 +2673,67 @@ function GameDetailContent() {
     awayForm,
     homeForm,
   });
+
+  const recommendationGap = Math.abs(prediction.awayWinProbability - prediction.homeWinProbability);
+  const recommendationOutlook = recommendationGap >= 14 ? "비교적 강한 우세" : recommendationGap >= 7 ? "근소 우세" : "접전 예상";
+  const gameStorageKey = `sports-ai-kbo-game-v1:${date}:${away}:${home}`;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(`${gameStorageKey}:history`) ?? "[]") as RecommendationHistoryItem[];
+      setRecommendationHistory(Array.isArray(stored) ? stored.slice(-8) : []);
+      setFavorite(window.localStorage.getItem(`${gameStorageKey}:favorite`) === "1");
+    } catch {
+      setRecommendationHistory([]);
+      setFavorite(false);
+    }
+  }, [gameStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || loading || errorMessage || !analysisUpdatedAt) return;
+    const storageKey = `${gameStorageKey}:history`;
+    let stored: RecommendationHistoryItem[] = [];
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]");
+      stored = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      stored = [];
+    }
+    const previous = stored.at(-1);
+    const changed = !previous || previous.pick !== prediction.winner || previous.outlook !== recommendationOutlook || previous.awayRate !== prediction.awayWinProbability || previous.homeRate !== prediction.homeWinProbability;
+    if (!changed) return;
+    const item: RecommendationHistoryItem = {
+      at: analysisUpdatedAt,
+      pick: prediction.winner,
+      outlook: recommendationOutlook,
+      awayRate: prediction.awayWinProbability,
+      homeRate: prediction.homeWinProbability,
+      reason: previous && previous.pick !== prediction.winner
+        ? "선발·최근 흐름 등 최신 데이터 반영으로 추천 팀 변경"
+        : previous
+          ? "최신 경기 데이터 반영으로 우세도 변경"
+          : "첫 분석 저장",
+    };
+    const next = [...stored, item].slice(-8);
+    window.localStorage.setItem(storageKey, JSON.stringify(next));
+    setRecommendationHistory(next);
+  }, [analysisUpdatedAt, errorMessage, gameStorageKey, loading, prediction.awayWinProbability, prediction.homeWinProbability, prediction.winner, recommendationOutlook]);
+
+  const toggleFavorite = () => {
+    const next = !favorite;
+    setFavorite(next);
+    window.localStorage.setItem(`${gameStorageKey}:favorite`, next ? "1" : "0");
+  };
+
+  const formattedUpdatedAt = analysisUpdatedAt
+    ? new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Seoul" }).format(new Date(analysisUpdatedAt))
+    : "데이터 확인 중";
+  const starterStatus = awayStarter && homeStarter
+    ? "양 팀 선발 반영"
+    : awayStarter || homeStarter
+      ? "선발 일부 확인"
+      : "선발 발표 전";
 
   useEffect(() => {
     if (loading || errorMessage) return;
@@ -2603,6 +2799,43 @@ function GameDetailContent() {
           </div>
         </div>
 
+        {!loading && !errorMessage && (
+          <section className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black text-blue-400">분석 상태</p>
+                <p className="mt-1 font-black">마지막 업데이트: {formattedUpdatedAt}</p>
+                <p className="mt-1 text-sm text-slate-400">{starterStatus} · 라인업 발표 전 변경 가능</p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleFavorite}
+                className={`rounded-xl border px-4 py-2 text-sm font-black ${favorite ? "border-amber-500 bg-amber-500 text-slate-950" : "border-slate-700 bg-slate-950 text-slate-300"}`}
+              >
+                {favorite ? "★ 관심 경기 저장됨" : "☆ 관심 경기 저장"}
+              </button>
+            </div>
+            <details className="mt-4 rounded-xl border border-slate-800 bg-slate-950">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-black text-slate-200">
+                추천 변경 기록 {recommendationHistory.length > 0 ? `${recommendationHistory.length}건` : "없음"}
+              </summary>
+              <div className="space-y-3 border-t border-slate-800 p-4">
+                {recommendationHistory.length ? [...recommendationHistory].reverse().map((item, index) => (
+                  <div key={`${item.at}-${index}`} className="flex flex-wrap items-start justify-between gap-2 text-sm">
+                    <div>
+                      <p className="font-black">{item.pick} · {item.outlook}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.reason}</p>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" }).format(new Date(item.at))}
+                    </p>
+                  </div>
+                )) : <p className="text-sm text-slate-500">현재 분석이 첫 기록으로 저장됩니다.</p>}
+              </div>
+            </details>
+          </section>
+        )}
+
         {loading && (
           <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-400">
             경기 데이터를 불러오는 중입니다.
@@ -2616,8 +2849,12 @@ function GameDetailContent() {
         )}
 
         {!loading && !errorMessage && (
-          <div className="mt-6 flex flex-wrap gap-2">{["종합","선발","최근경기","맞대결"].map((tab)=><button key={tab} type="button" onClick={()=>setActiveTab(tab)} className={`rounded-xl border px-4 py-2 text-sm font-black ${activeTab===tab?"border-blue-500 bg-blue-600 text-white":"border-slate-700 bg-slate-900 text-slate-300"}`}>{tab}</button>)}</div>
+          <div className="mt-6 flex flex-wrap gap-2">{["종합","선발","최근경기","맞대결","불펜","배당"].map((tab)=><button key={tab} type="button" onClick={()=>setActiveTab(tab)} className={`rounded-xl border px-4 py-2 text-sm font-black ${activeTab===tab?"border-blue-500 bg-blue-600 text-white":"border-slate-700 bg-slate-900 text-slate-300"}`}>{tab}</button>)}</div>
         )}
+
+        {!loading && !errorMessage && activeTab==="불펜" && <section className="mt-10"><h2 className="mb-5 text-2xl font-black">불펜 피로도</h2><div className="grid gap-5 md:grid-cols-2"><KboBullpenCard team={away} data={awayBullpen}/><KboBullpenCard team={home} data={homeBullpen}/></div></section>}
+
+        {!loading && !errorMessage && activeTab==="배당" && <AdvancedAnalysisSection prediction={prediction} away={away} home={home} awayForm={awayForm} homeForm={homeForm} date={date}/>} 
 
         {!loading && !errorMessage && activeTab==="종합" && (
           <>
@@ -2735,7 +2972,23 @@ function GameDetailContent() {
               awayForm={awayForm}
               homeForm={homeForm}
             />
-            <PredictionSection prediction={prediction} away={away} home={home} />
+            <PredictionSection
+              prediction={prediction}
+              away={away}
+              home={home}
+              awayStarter={awayStarter}
+              homeStarter={homeStarter}
+              awayForm={awayForm}
+              homeForm={homeForm}
+            />
+            <AdvancedAnalysisSection
+              prediction={prediction}
+              away={away}
+              home={home}
+              awayForm={awayForm}
+              homeForm={homeForm}
+              date={date}
+            />
           </>
         )}
       </section>
