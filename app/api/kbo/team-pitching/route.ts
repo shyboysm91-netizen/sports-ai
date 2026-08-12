@@ -101,6 +101,55 @@ function normalizeName(value: string) {
   return value.replace(/\s+/g, "").toLowerCase();
 }
 
+type NaverPitcherRow = {
+  playerId?: string;
+  playerName?: string;
+  teamId?: string;
+  pitcherEra?: number;
+  pitcherGameCount?: number;
+  pitcherWin?: number;
+  pitcherLose?: number;
+  pitcherSave?: number;
+  pitcherHold?: number;
+  pitcherWra?: number;
+  pitcherInning?: string;
+  pitcherHit?: number;
+  pitcherHr?: number;
+  pitcherBb?: number;
+  pitcherHp?: number;
+  pitcherKk?: number;
+  pitcherR?: number;
+  pitcherEr?: number;
+  pitcherWhip?: number;
+  pitcherPitchCount?: number;
+};
+
+async function fetchNaverTeamPitchers(teamCode: string): Promise<TeamPitcher[]> {
+  const year = Number(new Intl.DateTimeFormat("en", { timeZone: "Asia/Seoul", year: "numeric" }).format(new Date()));
+  const teamId = KBO_TEAM_IDS[teamCode];
+  const url = new URL(`https://api-gw.sports.naver.com/statistics/categories/kbo/seasons/${year}/players`);
+  url.search = new URLSearchParams({ playerType: "PITCHER", field: "era", direction: "ASC", pageSize: "500", page: "1" }).toString();
+  const response = await fetch(url, {
+    headers: { "User-Agent": "Sports-AI/1.0", Accept: "application/json" },
+    next: { revalidate: 1800 },
+  });
+  if (!response.ok) return [];
+  const payload = await response.json().catch(() => ({}));
+  const rows: NaverPitcherRow[] = Array.isArray(payload?.result?.seasonPlayerStats) ? payload.result.seasonPlayerStats : [];
+  return rows.filter((row) => row.teamId === teamId && row.playerId && row.playerName).map((row) => {
+    const innings = String(row.pitcherInning || "-");
+    return {
+      pcode: String(row.playerId), player: String(row.playerName), teamCode, team: TEAM_NAMES[teamCode],
+      era: Number(row.pitcherEra || 0), games: Number(row.pitcherGameCount || 0), completeGames: 0, shutouts: 0,
+      wins: Number(row.pitcherWin || 0), losses: Number(row.pitcherLose || 0), saves: Number(row.pitcherSave || 0), holds: Number(row.pitcherHold || 0),
+      winningPercentage: Number(row.pitcherWra || 0), plateAppearances: 0, pitches: Number(row.pitcherPitchCount || 0),
+      innings, inningsValue: parseInnings(innings), hits: Number(row.pitcherHit || 0), doubles: 0, triples: 0,
+      homeRuns: Number(row.pitcherHr || 0), walks: Number(row.pitcherBb || 0), hitByPitch: Number(row.pitcherHp || 0),
+      strikeouts: Number(row.pitcherKk || 0), runs: Number(row.pitcherR || 0), earnedRuns: Number(row.pitcherEr || 0), whip: Number(row.pitcherWhip || 0),
+    };
+  }).sort((a, b) => b.inningsValue - a.inningsValue || a.era - b.era);
+}
+
 async function fetchPitcherPage(teamId: string) {
   const urls = [
     `https://www.koreabaseball.com/Record/Player/PitcherBasic/Basic1.aspx?teamId=${teamId}&pos=PO`,
@@ -205,6 +254,8 @@ function parsePitchers(html: string, teamCode: string): TeamPitcher[] {
 }
 
 export async function loadTeamPitchers(teamCode: string) {
+  const naverPitchers = await fetchNaverTeamPitchers(teamCode).catch(() => []);
+  if (naverPitchers.length) return naverPitchers;
   const teamId = KBO_TEAM_IDS[teamCode];
   const html = await fetchPitcherPage(teamId);
   if (!html) throw new Error(`${TEAM_NAMES[teamCode]} 투수 기록 페이지를 받지 못했습니다.`);
@@ -246,7 +297,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      source: "KBO official Korean pitcher stats",
+      source: "Naver Sports KBO full pitcher stats (KBO official fallback)",
       updatedAt: new Date().toISOString(),
       teamCount: teamResults.length,
       pitcherCount: pitchers.length,

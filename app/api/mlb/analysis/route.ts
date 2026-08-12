@@ -13,6 +13,22 @@ async function getJson(url: string) {
   return r.json();
 }
 
+async function resolveProbablePitchers(awayId:number,homeId:number,date:string){
+  try{
+    const schedule=await getJson(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&startDate=${shiftDate(date,-1)}&endDate=${shiftDate(date,1)}&hydrate=probablePitcher,team`);
+    const games=(schedule?.dates??[]).flatMap((row:AnyObject)=>row?.games??[]);
+    const matched=games.find((game:AnyObject)=>{
+      const gameAway=num(game?.teams?.away?.team?.id),gameHome=num(game?.teams?.home?.team?.id);
+      const kstGameDate=game?.gameDate?koreaDate(new Date(game.gameDate)):"";
+      return gameAway===awayId&&gameHome===homeId&&kstGameDate===date;
+    }) ?? games.find((game:AnyObject)=>num(game?.teams?.away?.team?.id)===awayId&&num(game?.teams?.home?.team?.id)===homeId);
+    return {
+      away:num(matched?.teams?.away?.probablePitcher?.id),
+      home:num(matched?.teams?.home?.probablePitcher?.id),
+    };
+  }catch{return {away:0,home:0};}
+}
+
 function statBlock(payload: AnyObject, type: string) {
   return payload?.stats?.find((s: AnyObject) => s?.type?.displayName === type)?.splits?.[0]?.stat ?? {};
 }
@@ -129,17 +145,28 @@ async function recentGames(teamId:number, date:string) {
 }
 
 async function headToHead(awayId:number, homeId:number, season:string, date:string) {
+  // 맞대결은 현재 시즌 경기만 사용합니다. 10경기 미만이어도 전년도 기록을
+  // 섞지 않고 실제 이번 시즌 표본 수 그대로 표시합니다.
   const data=await getJson(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&teamId=${awayId}&opponentId=${homeId}&season=${season}&startDate=${season}-01-01&endDate=${date}&hydrate=team`);
-  const games=(data?.dates??[]).flatMap((d:AnyObject)=>d.games??[]).filter((g:AnyObject)=>g.status?.abstractGameState==="Final");
+  const games=(data?.dates??[]).flatMap((d:AnyObject)=>d.games??[]).filter((g:AnyObject)=>{
+    if(g.status?.abstractGameState!=="Final")return false;
+    const gameKstDate=g.gameDate?koreaDate(new Date(g.gameDate)):String(g.officialDate||"");
+    if(gameKstDate>=date)return false;
+    const awayScore=Number(g.teams?.away?.score),homeScore=Number(g.teams?.home?.score);
+    if(!Number.isFinite(awayScore)||!Number.isFinite(homeScore))return false;
+    // MLB의 0:0은 실제 무승부가 아니라 미진행·취소·연기 일정이므로 통계에서 제외합니다.
+    return !(awayScore===0&&homeScore===0);
+  });
   let awayWins=0, homeWins=0, draws=0, awayRuns=0, homeRuns=0;
   const rows=games.map((g:AnyObject)=>{
     const a=num(g.teams?.away?.score), h=num(g.teams?.home?.score); const actualAwayId=g.teams?.away?.team?.id;
     const targetAwayScore=actualAwayId===awayId?a:h; const targetHomeScore=actualAwayId===awayId?h:a;
     awayRuns+=targetAwayScore; homeRuns+=targetHomeScore;
     if(targetAwayScore>targetHomeScore)awayWins++; else if(targetAwayScore<targetHomeScore)homeWins++; else draws++;
-    return {date:g.officialDate, awayId:num(g.teams?.away?.team?.id), homeId:num(g.teams?.home?.team?.id), away:teamNameKo(g.teams?.away?.team?.name??"",g.teams?.away?.team?.id), home:teamNameKo(g.teams?.home?.team?.name??"",g.teams?.home?.team?.id), awayScore:a, homeScore:h};
+    return {date:g.gameDate?koreaDate(new Date(g.gameDate)):g.officialDate, awayId:num(g.teams?.away?.team?.id), homeId:num(g.teams?.home?.team?.id), away:teamNameKo(g.teams?.away?.team?.name??"",g.teams?.away?.team?.id), home:teamNameKo(g.teams?.home?.team?.name??"",g.teams?.home?.team?.id), awayScore:a, homeScore:h};
   });
-  const recent=rows.slice(-10).reverse();
+  const last10=rows.slice(-10).reverse();
+  const recent=last10.slice(0,5);
   let recentAwayWins=0,recentHomeWins=0,recentDraws=0,recentAwayRuns=0,recentHomeRuns=0;
   for(const g of recent){
     const awayIsTarget=Number(g.awayId)===awayId;
@@ -148,7 +175,11 @@ async function headToHead(awayId:number, homeId:number, season:string, date:stri
     recentAwayRuns+=targetAwayScore; recentHomeRuns+=targetHomeScore;
     if(targetAwayScore>targetHomeScore)recentAwayWins++; else if(targetAwayScore<targetHomeScore)recentHomeWins++; else recentDraws++;
   }
-  return {games:recent.length, awayWins:recentAwayWins, awayLosses:recentHomeWins, homeWins:recentHomeWins, homeLosses:recentAwayWins, draws:recentDraws, awayRuns:recentAwayRuns, homeRuns:recentHomeRuns, recent};
+  return {
+    games:recent.length, awayWins:recentAwayWins, awayLosses:recentHomeWins, homeWins:recentHomeWins, homeLosses:recentAwayWins,
+    draws:recentDraws, awayRuns:recentAwayRuns, homeRuns:recentHomeRuns, recent,
+    last10:{ games:last10.length, awayWins:last10.filter((g:any)=>{const ai=Number(g.awayId)===awayId;return (ai?g.awayScore:g.homeScore)>(ai?g.homeScore:g.awayScore)}).length, homeWins:last10.filter((g:any)=>{const ai=Number(g.awayId)===awayId;return (ai?g.awayScore:g.homeScore)<(ai?g.homeScore:g.awayScore)}).length, draws:last10.filter((g:any)=>g.awayScore===g.homeScore).length },
+  };
 }
 
 async function bullpen(teamId:number,date:string) {
@@ -171,9 +202,15 @@ async function bullpen(teamId:number,date:string) {
 
 export async function GET(request:Request){
   const p=new URL(request.url).searchParams; const date=p.get("date")??koreaDate(new Date()); const season=date.slice(0,4);
-  const awayId=num(p.get("awayTeamId")), homeId=num(p.get("homeTeamId")); const awayStarterId=num(p.get("awayStarterId")), homeStarterId=num(p.get("homeStarterId"));
+  const awayId=num(p.get("awayTeamId")), homeId=num(p.get("homeTeamId"));
+  let awayStarterId=num(p.get("awayStarterId")), homeStarterId=num(p.get("homeStarterId"));
   if(!awayId||!homeId) return NextResponse.json({success:false,message:"팀 정보가 필요합니다."},{status:400});
   try{
+    if(!awayStarterId||!homeStarterId){
+      const resolved=await resolveProbablePitchers(awayId,homeId,date);
+      awayStarterId=awayStarterId||resolved.away;
+      homeStarterId=homeStarterId||resolved.home;
+    }
     const [awayTeam,homeTeam,awayPitcher,homePitcher,awayRecent,homeRecent,h2h,awayBullpen,homeBullpen]=await Promise.all([
       teamStats(awayId,season),teamStats(homeId,season),pitcherStats(awayStarterId,season,homeId),pitcherStats(homeStarterId,season,awayId),recentGames(awayId,date),recentGames(homeId,date),headToHead(awayId,homeId,season,date),bullpen(awayId,date),bullpen(homeId,date)
     ]);

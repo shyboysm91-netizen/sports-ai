@@ -739,10 +739,10 @@ function drawCard(ctx: CanvasRenderingContext2D, index: number, d: ContentData, 
   }
 
   if (index === 3) {
-    sectionTitle(ctx, "최근 맞대결", "상대 전적에서 찾는 힌트", 70, 260);
+    sectionTitle(ctx, "최근 맞대결", "가장 최근 완료된 5경기 기준", 70, 260);
     matchupScore(ctx, 70, 470, 940, 430, d.away, d.home, d.awayH2h, d.homeH2h);
     ctx.fillStyle = "#8ea0b8"; ctx.font = "800 27px Arial";
-    ctx.fillText("최근 맞대결 기준", 70, 990);
+    ctx.fillText("가장 최근 완료된 5경기 기준", 70, 990);
     summaryBox(ctx, d.summary, 70, 1040, 940, 150);
   }
 

@@ -154,7 +154,7 @@ export async function GET(req:Request){
    json(u.origin,`/api/npb/pitchers?team=${encodeURIComponent(home)}&season=${season}`),
    json(u.origin,`/api/npb/recent-games-v2?team=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`),
    json(u.origin,`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&limit=10`),
-   json(u.origin,`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=10`),
+   json(u.origin,`/api/npb/recent-games-v2?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&limit=100`),
   ]);
 
   const [awayOriginalHint, homeOriginalHint] = await Promise.all([
@@ -166,8 +166,8 @@ export async function GET(req:Request){
   const [awayDetail,homeDetail]=fast
     ? [null,null]
     : await Promise.all([
-        awayBase?.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}&playerCode=${encodeURIComponent(awayStarterCode||awayBase.playerCode||"")}`):Promise.resolve(null),
-        homeBase?.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}&playerCode=${encodeURIComponent(homeStarterCode||homeBase.playerCode||"")}`):Promise.resolve(null),
+        awayBase&&awayBase.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}&playerCode=${encodeURIComponent(awayStarterCode||awayBase.playerCode||"")}`):Promise.resolve(null),
+        homeBase&&homeBase.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}&playerCode=${encodeURIComponent(homeStarterCode||homeBase.playerCode||"")}`):Promise.resolve(null),
       ]);
 
   const a:Standing|undefined=standings.standings?.find((x:Standing)=>x.team===away);
@@ -189,7 +189,9 @@ export async function GET(req:Request){
   const pitchingEdge=((ap?.era??3.5)-(hp?.era??3.5))*2.8;
   const homeForm=(splitRate(h?.home)-splitRate(a?.away))*13;
   const recentEdge=((homeRecent?.summary?.wins??0)-(awayRecent?.summary?.wins??0))*0.6;
-  const h2hEdge=((h2h?.summary?.wins??0)-(h2h?.summary?.losses??0))*0.45;
+  const h2hRecentGames=(h2h?.games??[]).slice(0,5);
+  const h2hRecentSummary={games:h2hRecentGames.length,wins:h2hRecentGames.filter((g:any)=>g.result==="승").length,losses:h2hRecentGames.filter((g:any)=>g.result==="패").length,draws:h2hRecentGames.filter((g:any)=>g.result==="무").length};
+  const h2hEdge=(h2hRecentSummary.wins-h2hRecentSummary.losses)*0.45;
   const homeAdv=3;
 
   const homeProb=Math.round(clamp(50+seasonEdge+battingEdge+pitchingEdge+starterEdge+homeForm+recentEdge+h2hEdge+homeAdv,25,75));
@@ -234,7 +236,7 @@ export async function GET(req:Request){
     },
     matchup:{
       title:"상대전적 해석",
-      text:matchupSentence(away,home,h2h,scores.headToHead),
+      text:matchupSentence(away,home,{...h2h,summary:h2hRecentSummary,games:h2hRecentGames},scores.headToHead),
     },
     keyPoint:{
       title:"승부 핵심 포인트",
@@ -272,7 +274,7 @@ export async function GET(req:Request){
     homeStarterDetail:homeStarterFull,
     awayRecent:awayRecent?.success?awayRecent:null,
     homeRecent:homeRecent?.success?homeRecent:null,
-    headToHead:h2h?.success?h2h:null,
+    headToHead:h2h?.success?{...h2h,recent5:{summary:h2hRecentSummary,games:h2hRecentGames}}:null,
     probability:{away:100-homeProb,home:homeProb},
     pick,confidence,scores,reasons,expertAnalysis
   });

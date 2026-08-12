@@ -309,18 +309,22 @@ function RecentPanel({ title, data }: { title: string; data: any }) {
 }
 
 function HeadToHeadPanel({ away, home, data }: { away: string; home: string; data: any }) {
-  const games = (data?.games || [])
+  const tenGames = (data?.games || [])
     .filter((game: any) => {
       const homeScore = Number(game.homeScore);
       const awayScore = Number(game.awayScore);
       return Number.isFinite(homeScore) && Number.isFinite(awayScore) && !(homeScore === 0 && awayScore === 0);
-    })
-    .slice(0, 10);
+    }).slice(0,10);
+  const games = (data?.recent5?.games || tenGames.slice(0, 5)).slice(0, 5);
 
   const scoreFor = (game: any, team: string) =>
     game.homeTeam === team ? Number(game.homeScore) : Number(game.awayScore);
   const scoreAgainst = (game: any, team: string) =>
     game.homeTeam === team ? Number(game.awayScore) : Number(game.homeScore);
+
+  const seasonAwayWins = tenGames.filter((game: any) => scoreFor(game, away) > scoreAgainst(game, away)).length;
+  const seasonHomeWins = tenGames.filter((game: any) => scoreFor(game, home) > scoreAgainst(game, home)).length;
+  const seasonDraws = tenGames.filter((game: any) => Number(game.homeScore) === Number(game.awayScore)).length;
 
   const awayWins = games.filter((game: any) => scoreFor(game, away) > scoreAgainst(game, away)).length;
   const homeWins = games.filter((game: any) => scoreFor(game, home) > scoreAgainst(game, home)).length;
@@ -334,9 +338,11 @@ function HeadToHeadPanel({ away, home, data }: { away: string; home: string; dat
   const homeRate = Math.round((homeWins / decidedGames) * 100);
 
   return (
-    <Card title="최근 맞대결 10경기">
+    <Card title="맞대결 기준별 기록">
       {games.length ? (
         <>
+          <div className="mt-3 rounded-xl border border-slate-700 bg-slate-950 p-4"><p className="text-xs font-black text-slate-400">이번 시즌 맞대결 · {tenGames.length}경기 (최대 10경기)</p><div className="mt-2 flex flex-wrap justify-between gap-3 text-sm font-black"><span className="text-blue-400">{shortTeamName(away)} {seasonAwayWins}승 {seasonHomeWins}패{seasonDraws ? ` ${seasonDraws}무` : ""}</span><span className="text-red-400">{shortTeamName(home)} {seasonHomeWins}승 {seasonAwayWins}패{seasonDraws ? ` ${seasonDraws}무` : ""}</span></div></div>
+          <p className="mt-5 text-xs font-black text-blue-400">가장 최근 맞대결 5경기 · {games.length}경기</p>
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="rounded-xl border border-blue-800/70 bg-blue-950/20 px-4 py-3">
               <p className="truncate text-sm font-black text-blue-300">{shortTeamName(away)}</p>
@@ -350,7 +356,7 @@ function HeadToHeadPanel({ away, home, data }: { away: string; home: string; dat
             </div>
 
             <div className="rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-center">
-              <p className="text-xs font-black text-slate-500">전체 전적</p>
+              <p className="text-xs font-black text-slate-500">최근 5경기</p>
               <p className="mt-1 text-2xl font-black text-white">{games.length}경기</p>
               <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-slate-800">
                 <div className="bg-blue-600" style={{ width: `${(awayWins / games.length) * 100}%` }} />
@@ -395,7 +401,7 @@ function HeadToHeadPanel({ away, home, data }: { away: string; home: string; dat
 
                   return (
                     <tr key={`${game.date}-${index}`} className="border-t border-slate-800 first:border-t-0">
-                      <td className="px-3 py-3 text-center font-bold text-slate-300">{String(game.date).slice(5)}</td>
+                      <td className="px-3 py-3 text-center font-bold text-slate-300">{String(game.date)}</td>
                       <td className="px-3 py-3 text-center">
                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${awayIsHome ? "border-blue-800 bg-blue-950/50 text-blue-300" : "border-red-800 bg-red-950/50 text-red-300"}`}>
                           {venueText}
@@ -458,7 +464,7 @@ function MarketPanel({ away, home, data, analysis }: { away: string; home: strin
   const totalLine = market?.total?.line;
   const totalEdge = expectedTotal != null && Number.isFinite(totalLine) ? expectedTotal - totalLine : null;
   const totalPick = expectedTotal != null && Number.isFinite(totalLine)
-    ? expectedTotal >= totalLine + 1 ? "오버" : expectedTotal <= totalLine - 1 ? "언더" : "패스"
+    ? expectedTotal > totalLine ? "오버 추천" : expectedTotal < totalLine ? "언더 추천" : "적중무효"
     : null;
   return (
     <Card title="경기 배당">
@@ -495,7 +501,7 @@ function MarketPanel({ away, home, data, analysis }: { away: string; home: strin
                   <div className="border-t border-slate-800 pt-3">
                     <p className="flex justify-between text-slate-300"><span>시장 기준점</span><span>{market.total.line.toFixed(1)}점</span></p>
                     <p className="mt-1 flex justify-between text-blue-300"><span>AI 예상 총점</span><span>{expectedTotal != null ? `${expectedTotal.toFixed(1)}점` : "계산 불가"}</span></p>
-                    {totalEdge != null && <p className="mt-1 text-xs text-slate-500">기준점 대비 {totalEdge >= 0 ? "+" : ""}{totalEdge.toFixed(1)}점 · 최종 판단 {totalPick}</p>}
+                    {totalEdge != null && <p className="mt-1 text-xs font-bold text-amber-300">기준점 대비 {totalEdge >= 0 ? "+" : ""}{totalEdge.toFixed(1)}점 · {totalPick}</p>}
                   </div>
                 </div>
               ) : <p className="mt-3 text-sm text-slate-500">기준점 확인 전</p>}
@@ -722,7 +728,7 @@ function Content() {
           signal: controller.signal,
         };
 
-        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&awayStarterCode=${encodeURIComponent(awayStarterCode)}&homeStarterCode=${encodeURIComponent(homeStarterCode)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=11`;
+        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&awayStarterCode=${encodeURIComponent(awayStarterCode)}&homeStarterCode=${encodeURIComponent(homeStarterCode)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=14&h2hVersion=5`;
         const [analysisResponse, marketResponse, weatherResponse, scheduleResponse] =
           await Promise.all([
             fetch(dataCacheUrl(`${analysisBase}&fast=1`, 300), baseOptions),
@@ -864,7 +870,8 @@ function Content() {
       homeStarter: resolvedHomeStarter,
       awayStarterCode: String(scheduledGame?.awayStarterCode || awayStarterCode || ""),
       homeStarterCode: String(scheduledGame?.homeStarterCode || homeStarterCode || ""),
-      npbPitcherFix: "11",
+      npbPitcherFix: "14",
+      h2hVersion: "5",
     });
     fetch(dataCacheUrl(`/api/npb/analysis?${params.toString()}`, 60), {
       cache: "no-store",

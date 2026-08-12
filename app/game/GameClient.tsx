@@ -133,6 +133,8 @@ type TeamFormResponse = {
   opponent: string;
   recent10: TeamFormSection;
   headToHead: TeamFormSection;
+  headToHead10?: TeamFormSection;
+  recentHeadToHead5?: TeamFormSection;
   weekday?: { label: string; summary: FormSummary; games: TeamGame[] };
   message?: string;
 };
@@ -318,8 +320,8 @@ function makePrediction({
     homeStarter && homeStarter.pitcher.era >= 0 ? homeStarter.pitcher.era : 4.5;
   const awayVsEra = awayStarter?.opponentStats?.era ?? awayEra;
   const homeVsEra = homeStarter?.opponentStats?.era ?? homeEra;
-  const awayH2H = awayForm?.headToHead.summary;
-  const homeH2H = homeForm?.headToHead.summary;
+  const awayH2H = awayForm?.recentHeadToHead5?.summary ?? awayForm?.headToHead.summary;
+  const homeH2H = homeForm?.recentHeadToHead5?.summary ?? homeForm?.headToHead.summary;
   const h2hGames = safe(awayH2H?.games);
   const awayH2HRate = h2hGames ? safe(awayH2H?.wins) / h2hGames : 0.5;
   const homeH2HRate = h2hGames ? safe(homeH2H?.wins) / h2hGames : 0.5;
@@ -739,8 +741,8 @@ function AdvancedAnalysisSection({
   const homeGap =
     marketHome == null ? null : prediction.homeWinProbability - marketHome;
   const predictedTotal = prediction.expectedTotal;
-  const displayedPredictedTotal = prediction.awayScore + prediction.homeScore;
-  const totalPick = total ? (predictedTotal >= total.line ? "오버" : "언더") : null;
+  const displayedPredictedTotal = prediction.expectedTotal;
+  const totalPick = total ? (predictedTotal > total.line ? "오버 추천" : predictedTotal < total.line ? "언더 추천" : "적중무효") : null;
   const bestGap =
     awayGap == null || homeGap == null ? null : Math.max(awayGap, homeGap);
   const aiTeam =
@@ -853,7 +855,7 @@ function AdvancedAnalysisSection({
           <div className="rounded-2xl bg-slate-950 p-5">
             <p className="text-xs text-slate-500">실제 U/O 기준</p>
             <p className="mt-3 text-xl font-black text-amber-400">
-              {total ? `${totalPick} 방향` : "기준점 확인 전"}
+              {total ? totalPick : "기준점 확인 전"}
             </p>
             <p className="mt-1 text-xs text-slate-500">
               {total ? `시장 기준 ${total.line}점 · AI 예상 ${displayedPredictedTotal}점` : "실제 기준점 미수신"}
@@ -1031,9 +1033,9 @@ function ExpertReportSection({
     {
       title: "상대전적 해석",
       text:
-        awayForm?.headToHead.summary.games
-          ? `이번 시즌 맞대결은 ${awayForm.headToHead.summary.games}경기 표본입니다. 상대전적은 투수 유형과 구장 특성에 따른 반복 패턴을 확인하는 보조 지표로 활용했으며, 현재 선발과 최근 팀 컨디션보다 낮은 가중치를 적용했습니다.`
-          : "시즌 맞대결 표본이 적어 상대전적은 핵심 근거가 아닌 보조 지표로만 반영했습니다.",
+        awayForm?.recentHeadToHead5?.summary.games
+          ? `가장 최근 맞대결 ${awayForm.recentHeadToHead5.summary.games}경기를 분석에 반영했습니다. 별도로 최근 10경기 기록도 제공하지만, 예측에는 현재 흐름에 가까운 최근 5경기를 더 중요하게 적용했습니다.`
+          : "최근 맞대결 표본이 적어 상대전적은 핵심 근거가 아닌 보조 지표로만 반영했습니다.",
     },
     {
       title: "승부 핵심 포인트",
@@ -1095,7 +1097,7 @@ function PredictionSection({
   awayForm: TeamFormResponse | null;
   homeForm: TeamFormResponse | null;
 }) {
-  const displayedPredictedTotal = prediction.awayScore + prediction.homeScore;
+  const displayedPredictedTotal = prediction.expectedTotal;
   const probabilityGap = Math.abs(prediction.awayWinProbability - prediction.homeWinProbability);
   const outlook = probabilityGap >= 14 ? "비교적 강한 우세" : probabilityGap >= 7 ? "근소 우세" : "접전 예상";
   const startersConfirmed = Boolean(awayStarter && homeStarter);
@@ -2184,15 +2186,27 @@ function GameHistoryList({
 function HeadToHeadComparison({
   awayName,
   homeName,
-  awaySection,
+  tenSection,
+  recentSection,
 }: {
   awayName: string;
   homeName: string;
-  awaySection?: TeamFormSection;
-  homeSection?: TeamFormSection;
+  tenSection?: TeamFormSection;
+  recentSection?: TeamFormSection;
 }) {
+  const validGames = (section?: TeamFormSection) => {
+    const seen = new Set<string>();
+    return (section?.games ?? []).filter((game) => {
+      const teamScore = Number(game.teamScore), opponentScore = Number(game.opponentScore);
+      if (!Number.isFinite(teamScore) || !Number.isFinite(opponentScore) || (teamScore === 0 && opponentScore === 0)) return false;
+      const key = `${game.date}|${game.opponent}|${teamScore}|${opponentScore}`;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+  };
+  const tenGames = validGames(tenSection).slice(0, 10);
   const seenH2H = new Set<string>();
-  const games = (awaySection?.games ?? [])
+  const games = validGames(recentSection || tenSection)
     .filter((game) => {
       const teamScore = Number(game.teamScore);
       const opponentScore = Number(game.opponentScore);
@@ -2204,7 +2218,13 @@ function HeadToHeadComparison({
       seenH2H.add(key);
       return true;
     })
-    .slice(0, 10);
+    .slice(0, 5);
+  const record = (rows: TeamGame[]) => ({
+    awayWins: rows.filter((game) => Number(game.teamScore) > Number(game.opponentScore)).length,
+    homeWins: rows.filter((game) => Number(game.teamScore) < Number(game.opponentScore)).length,
+    draws: rows.filter((game) => Number(game.teamScore) === Number(game.opponentScore)).length,
+  });
+  const tenRecord = record(tenGames);
   const awayWins = games.filter((game) => Number(game.teamScore) > Number(game.opponentScore)).length;
   const homeWins = games.filter((game) => Number(game.teamScore) < Number(game.opponentScore)).length;
   const draws = games.filter((game) => Number(game.teamScore) === Number(game.opponentScore)).length;
@@ -2219,8 +2239,16 @@ function HeadToHeadComparison({
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-      <p className="text-xs font-black text-blue-400">최근 맞대결 {games.length}경기 기준</p>
-      <h3 className="mt-1 text-xl font-black">{awayName} vs {homeName} 맞대결</h3>
+      <p className="text-xs font-black text-blue-400">기준별 상대전적</p>
+      <h3 className="mt-1 text-xl font-black">{awayName} vs {homeName}</h3>
+      <div className="mt-4 rounded-xl border border-slate-700 bg-slate-950 p-4">
+        <p className="text-xs font-black text-slate-400">이번 시즌 맞대결 · {tenGames.length}경기 (최대 10경기)</p>
+        <div className="mt-2 flex flex-wrap justify-between gap-3 font-black">
+          <span className="text-red-400">{awayName} {tenRecord.awayWins}승 {tenRecord.homeWins}패{tenRecord.draws ? ` ${tenRecord.draws}무` : ""}</span>
+          <span className="text-blue-400">{homeName} {tenRecord.homeWins}승 {tenRecord.awayWins}패{tenRecord.draws ? ` ${tenRecord.draws}무` : ""}</span>
+        </div>
+      </div>
+      <p className="mt-5 text-xs font-black text-blue-400">최근 맞대결 5경기 · {games.length}경기</p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="rounded-xl border border-red-900/50 bg-red-950/20 px-4 py-3">
           <p className="font-black text-red-400">{awayName}</p>
@@ -2248,13 +2276,13 @@ function HeadToHeadComparison({
                 <span className={scoreResultClass(awayTeam, winner)}>{awayScore}</span>
                 <span className={teamResultClass(awayTeam, winner)}>{awayTeam}</span>
               </div>
-              <span className="text-right text-xs text-slate-500">{String(game.date).slice(5)}</span>
+              <span className="text-right text-xs text-slate-500">{String(game.date)}</span>
             </div>
           );
         }) : <p className="p-5 text-center text-sm text-slate-500">최근 맞대결 기록이 없습니다.</p>}
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-500">
-        이번 시즌 최근 맞대결 기준입니다. 당시 선발투수와 현재 라인업은 다를 수 있어 보조 지표로 확인하세요.
+        위 기록은 이번 시즌 맞대결만 집계하며, 아래에는 그중 가장 최근 5경기를 표시합니다. 전년도 경기는 포함하지 않습니다.
       </p>
     </section>
   );
@@ -2347,18 +2375,18 @@ function GameDetailContent() {
             signal: controller.signal,
           }),
 
-          fetch(dataCacheUrl(`/api/kbo/team-pitching?team=${encodeURIComponent(awayCode)}`, 1800), {
+          fetch(dataCacheUrl(`/api/kbo/team-pitching?team=${encodeURIComponent(awayCode)}&version=2`, 1800), {
             cache: "no-store",
             signal: controller.signal,
           }),
 
-          fetch(dataCacheUrl(`/api/kbo/team-pitching?team=${encodeURIComponent(homeCode)}`, 1800), {
+          fetch(dataCacheUrl(`/api/kbo/team-pitching?team=${encodeURIComponent(homeCode)}&version=2`, 1800), {
             cache: "no-store",
             signal: controller.signal,
           }),
 
           fetch(
-            dataCacheUrl(`/api/kbo/team-form?team=${encodeURIComponent(
+            dataCacheUrl(`/api/kbo/team-form?version=5&team=${encodeURIComponent(
               awayCode,
             )}&opponent=${encodeURIComponent(
               homeCode,
@@ -2370,7 +2398,7 @@ function GameDetailContent() {
           ),
 
           fetch(
-            dataCacheUrl(`/api/kbo/team-form?team=${encodeURIComponent(
+            dataCacheUrl(`/api/kbo/team-form?version=5&team=${encodeURIComponent(
               homeCode,
             )}&opponent=${encodeURIComponent(
               awayCode,
@@ -2510,7 +2538,7 @@ function GameDetailContent() {
         if (awayPitcher) {
           opponentRequests.push(
             fetch(
-              dataCacheUrl(`/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(awayPitcher.pcode || "")}&name=${encodeURIComponent(resolvedAwayStarterName || awayPitcher.player)}&opponent=${encodeURIComponent(homeCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(awayCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=away&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}&detailVersion=6`, 0),
+              dataCacheUrl(`/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(awayPitcher.pcode || "")}&name=${encodeURIComponent(resolvedAwayStarterName || awayPitcher.player)}&opponent=${encodeURIComponent(homeCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(awayCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=away&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}&detailVersion=7`, 0),
               { cache: "no-store", signal: controller.signal },
             ),
           );
@@ -2518,7 +2546,7 @@ function GameDetailContent() {
         if (homePitcher) {
           opponentRequests.push(
             fetch(
-              dataCacheUrl(`/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(homePitcher.pcode || "")}&name=${encodeURIComponent(resolvedHomeStarterName || homePitcher.player)}&opponent=${encodeURIComponent(awayCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(homeCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=home&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}&detailVersion=6`, 0),
+              dataCacheUrl(`/api/kbo/pitcher-vs-team?pcode=${encodeURIComponent(homePitcher.pcode || "")}&name=${encodeURIComponent(resolvedHomeStarterName || homePitcher.player)}&opponent=${encodeURIComponent(awayCode)}&stadium=${encodeURIComponent(stadium)}&team=${encodeURIComponent(homeCode)}&homeTeam=${encodeURIComponent(homeCode)}&side=home&date=${encodeURIComponent(date)}&time=${encodeURIComponent(time)}&detailVersion=7`, 0),
               { cache: "no-store", signal: controller.signal },
             ),
           );
@@ -2950,8 +2978,8 @@ function GameDetailContent() {
                 <HeadToHeadComparison
                   awayName={away}
                   homeName={home}
-                  awaySection={awayForm?.headToHead}
-                  homeSection={homeForm?.headToHead}
+                  tenSection={awayForm?.headToHead10 || awayForm?.headToHead}
+                  recentSection={awayForm?.recentHeadToHead5}
                 />
               </div>
             </section>

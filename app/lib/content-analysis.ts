@@ -102,7 +102,8 @@ async function kbo(siteUrl: string, game: ContentGame, date: string): Promise<Re
   const hBatting = batting?.batting?.find((row: any) => row.team === home);
   const awayRecentSummary = awayForm?.recent10?.summary;
   const homeRecentSummary = homeForm?.recent10?.summary;
-  const awayH2hSummary = awayForm?.headToHead?.summary;
+  const awaySeasonH2hSummary = awayForm?.headToHead?.summary;
+  const awayH2hSummary = awayForm?.recentHeadToHead5?.summary || awaySeasonH2hSummary;
   // 맞대결은 같은 경기 집합이어야 하므로 원정팀 기준 응답 하나를 정본으로 사용합니다.
   // 양쪽 API를 따로 쓰면 공급처 갱신 시점 차이로 서로 성립하지 않는 전적이 생길 수 있습니다.
   const homeH2hSummary = awayH2hSummary ? {
@@ -233,7 +234,7 @@ async function npb(siteUrl: string, game: ContentGame, date: string): Promise<Re
   });
   const data = await json(`${siteUrl}/api/npb/analysis?${query}`);
   const homeProb = Math.round(n(data?.probability?.home, 50));
-  const awayRecent = data?.awayRecent?.summary, homeRecent = data?.homeRecent?.summary, h2h = data?.headToHead?.summary;
+  const awayRecent = data?.awayRecent?.summary, homeRecent = data?.homeRecent?.summary, h2h = data?.headToHead?.recent5?.summary || data?.headToHead?.summary;
   const [awayScore, homeScore] = projectedScores(averageRuns(awayRecent), averageRuns(homeRecent), homeProb);
   const awayEra = s(data?.awayStarterSeason?.era ?? data?.awayStarterDetail?.era);
   const homeEra = s(data?.homeStarterSeason?.era ?? data?.homeStarterDetail?.era);

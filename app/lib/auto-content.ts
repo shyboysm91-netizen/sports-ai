@@ -72,7 +72,7 @@ async function renderVideo(game: Game, league: ContentLeague, date: string, site
     ["오늘 승부를 가를 3가지", [`${away} vs ${home}`, "선발 · 최근 흐름 · 맞대결"]],
     ["선발투수 비교", [`${away}: ${a} · ERA ${analysis.awayEra}`, `${home}: ${h} · ERA ${analysis.homeEra}`]],
     ["최근 10경기", [`${away}: ${analysis.awayRecent}`, `${home}: ${analysis.homeRecent}`]],
-    ["최근 맞대결", [`${away}: ${matchupLabel(analysis.awayH2h)}`, `${home}: ${matchupLabel(analysis.homeH2h)}`]],
+    ["최근 맞대결 5경기", [`${away}: ${matchupLabel(analysis.awayH2h)}`, `${home}: ${matchupLabel(analysis.homeH2h)}`]],
     ["AI 최종 예측", [`${predicted} 우세 · ${analysis.homeWinRate}%`, `예상 점수 ${analysis.awayScore} : ${analysis.homeScore}`]],
     ["전체 데이터 확인", [analysis.summary, "프로필 링크에서 무료 확인", "장군분석.kr"]],
   ];

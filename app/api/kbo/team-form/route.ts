@@ -366,6 +366,8 @@ export async function GET(request: Request) {
       .map((game) => createTeamGame(game, teamCode))
       .sort((a, b) => b.date.localeCompare(a.date));
 
+    // 맞대결 역시 현재 시즌 완료 경기만 사용합니다. 10경기보다 적어도
+    // 전년도 경기로 채우지 않습니다.
     const headToHeadGames = allCompletedGames
       .filter((game) =>
         (game.awayCode === teamCode && game.homeCode === opponentCode) ||
@@ -392,6 +394,8 @@ export async function GET(request: Request) {
       // 화면에는 노출하지 않고 내부 API 보강용으로만 사용됩니다.
       seasonGames: teamGames.slice(0, 120),
       headToHead: { summary: summarizeGames(headToHeadGames), games: headToHeadGames },
+      headToHead10: { summary: summarizeGames(headToHeadGames.slice(0, 10)), games: headToHeadGames.slice(0, 10) },
+      recentHeadToHead5: { summary: summarizeGames(headToHeadGames.slice(0, 5)), games: headToHeadGames.slice(0, 5) },
       weekday: { label: targetWeekday, summary: summarizeGames(weekdayGames), games: weekdayGames },
       debug: { totalSeasonGames: allCompletedGames.length, teamGames: teamGames.length, headToHeadGames: headToHeadGames.length },
     });

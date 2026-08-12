@@ -189,7 +189,7 @@ export async function GET(request: Request) {
   const opponent = query.get("opponent")
     ? findTeam(query.get("opponent")!)
     : null;
-  const limit = Math.min(10, Math.max(1, Number(query.get("limit") || 10)));
+  const limit = Math.min(100, Math.max(1, Number(query.get("limit") || 10)));
   const endDateText = query.get("date") || kstIsoDate(new Date());
 
   if (!team) {
@@ -201,7 +201,11 @@ export async function GET(request: Request) {
 
   try {
     const endDate = new Date(`${endDateText}T12:00:00+09:00`);
-    const searchDays = opponent ? 220 : 55;
+    // 맞대결은 요청 연도의 정규시즌 경기만 사용합니다. 이번 시즌 표본이
+    // 10경기보다 적어도 전년도 경기로 채우지 않습니다.
+    const seasonStart = new Date(`${endDateText.slice(0, 4)}-03-01T12:00:00+09:00`);
+    const seasonDays = Math.max(1, Math.ceil((endDate.getTime() - seasonStart.getTime()) / 86400000));
+    const searchDays = opponent ? seasonDays : 55;
     const dates = Array.from({ length: searchDays }, (_, index) => {
       const target = new Date(endDate);
       target.setDate(target.getDate() - index - 1);

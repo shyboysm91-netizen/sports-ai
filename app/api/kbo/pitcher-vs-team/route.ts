@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { loadTeamPitchers, type TeamPitcher } from "@/app/api/kbo/team-pitching/route";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -1114,6 +1115,19 @@ export async function GET(request: Request) {
     const side = searchParams.get("side")?.trim().toLowerCase() ?? "";
     const homeTeam = searchParams.get("homeTeam")?.trim().toUpperCase() ?? "";
 
+    let fullPitcher: TeamPitcher | undefined;
+    if (team) {
+      const teamPitchers = await loadTeamPitchers(team).catch(() => []);
+      const normalizedName = normalize(name);
+      fullPitcher = teamPitchers.find((row) => pcode && row.pcode === pcode)
+        || teamPitchers.find((row) => normalizedName && normalize(row.player) === normalizedName)
+        || teamPitchers.find((row) => {
+          const candidate = normalize(row.player);
+          return normalizedName && candidate && (candidate.includes(normalizedName) || normalizedName.includes(candidate));
+        });
+      if (!/^\d+$/.test(pcode) && fullPitcher?.pcode) pcode = fullPitcher.pcode;
+    }
+
     if (!/^\d+$/.test(pcode)) {
       pcode = await resolvePcode(name);
     }
@@ -1142,7 +1156,20 @@ export async function GET(request: Request) {
       throw new Error("KBO 선수 기록 페이지를 모두 불러오지 못했습니다.");
     }
 
-    const seasonStats = parseSeasonStats(basicHtml);
+    const parsedSeasonStats = parseSeasonStats(basicHtml);
+    const seasonStats = parsedSeasonStats || (fullPitcher ? {
+      games: fullPitcher.games,
+      wins: fullPitcher.wins,
+      losses: fullPitcher.losses,
+      innings: fullPitcher.innings,
+      era: Number(fullPitcher.era.toFixed(2)),
+      whip: Number(fullPitcher.whip.toFixed(2)),
+      hits: fullPitcher.hits,
+      walks: fullPitcher.walks,
+      strikeouts: fullPitcher.strikeouts,
+      homeRuns: fullPitcher.homeRuns,
+      earnedRuns: fullPitcher.earnedRuns,
+    } : null);
     const stats = parseOpponentStats(gameHtml, opponent);
     const requestDate =
       searchParams.get("date") ??
@@ -1194,11 +1221,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      source: "KBO official pitcher records",
+      source: "Naver Sports full-season stats + KBO official pitcher details",
       updatedAt: new Date().toISOString(),
       pcode,
       playerName:
-        getPlayerName(basicHtml) || getPlayerName(dailyHtml) || name,
+        getPlayerName(basicHtml) || getPlayerName(dailyHtml) || fullPitcher?.player || name,
       opponent,
       found: stats !== null,
       stats,
