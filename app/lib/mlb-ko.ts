@@ -30,6 +30,39 @@ export const MLB_TEAM_KO_BY_EN: Record<string, string> = {
   "Milwaukee Brewers": "밀워키 브루어스",
 };
 
+const CURRENT_MLB_PITCHER_KO: Record<string, string> = {
+  "Quinn Mathews": "퀸 매튜스",
+  "Kent Emanuel": "켄트 이매뉴얼",
+  "Andrew Painter": "앤드류 페인터",
+  "Brandon Young": "브랜든 영",
+  "브랜든 Young": "브랜든 영",
+  "Shane McClanahan": "셰인 맥클라나한",
+  "셰인 McClanahan": "셰인 맥클라나한",
+  "Andre Pallante": "안드레 팔란테",
+  "Rhett Lowder": "렛 라우더",
+  "Janson Junk": "잰슨 정크",
+  "Cristopher Sánchez": "크리스토퍼 산체스",
+  "크리스토퍼 Sánchez": "크리스토퍼 산체스",
+  "Framber Valdez": "프람버 발데스",
+  "Carmen Mlodzinski": "카르멘 모진스키",
+  "Mitch Bratt": "미치 브랫",
+  "Alec Gamboa": "알렉 감보아",
+  "알렉 Gamboa": "알렉 감보아",
+  "Walker Buehler": "워커 뷸러",
+  "워커 Buehler": "워커 뷸러",
+  "Nolan McLean": "놀란 맥린",
+  "Mason Barnett": "메이슨 바넷",
+  "Michael Wacha": "마이클 와카",
+  "마이클 Wacha": "마이클 와카",
+  "Martín Pérez": "마르틴 페레스",
+  "Martin Perez": "마르틴 페레스",
+  "Bailey Ober": "베일리 오버",
+  "Luis Castillo": "루이스 카스티요",
+  "Shota Imanaga": "이마나가 쇼타",
+  "Blake Snell": "블레이크 스넬",
+  "Tomoyuki Sugano": "스가노 도모유키",
+};
+
 const PLAYER_NAME_KO: Record<string, string> = {
   "Christian Scott": "크리스티안 스콧", "Bryce Elder": "브라이스 엘더",
   "Trevor Rogers": "트레버 로저스", "Dean Kremer": "딘 크레머",
@@ -142,6 +175,7 @@ export function teamNameKo(name: string, id?: number) {
 
 export function playerNameKo(name: string) {
   if (!name) return "";
+  if (CURRENT_MLB_PITCHER_KO[name]) return CURRENT_MLB_PITCHER_KO[name];
   if (PLAYER_NAME_KO[name]) return PLAYER_NAME_KO[name];
   const parts = name.replace(/\./g, "").split(/\s+/).filter(Boolean);
   if (parts.length === 0) return name;
