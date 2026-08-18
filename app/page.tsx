@@ -168,6 +168,9 @@ export default function Home() {
                 {item}
               </button>
             ))}
+            <Link href="/football" className="text-emerald-400 hover:text-emerald-300">
+              축구
+            </Link>
           </nav>
         </div>
       </header>
