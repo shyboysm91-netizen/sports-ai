@@ -15,6 +15,7 @@ const PAGES: Array<readonly [string,string,string]> = [
   ["/players/kbo", "daily", "0.8"],
   ["/players/mlb", "daily", "0.8"],
   ["/players/npb", "daily", "0.8"],
+  ["/football", "daily", "0.9"],
   ["/about", "monthly", "0.6"],
   ["/contact", "yearly", "0.5"],
   ["/privacy", "yearly", "0.4"],

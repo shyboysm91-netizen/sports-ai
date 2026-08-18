@@ -122,6 +122,11 @@ export async function GET(request: Request) {
     const path = `/api/football?date=${date}`;
     const schedule = await cachedJson(origin, path, 21600);
     results.push({ path, ok: Boolean(schedule), status: schedule ? 200 : 500 });
+    for (const game of gameArray(schedule)) {
+      if (!game.id || !game.league || !game.home || !game.away) continue;
+      const matchup = encodeURIComponent(`${game.home}-대-${game.away}`);
+      indexNowUrls.add(`${origin}/football/analysis/${encodeURIComponent(game.league)}/${encodeURIComponent(game.date || date)}/${encodeURIComponent(game.id)}/${matchup}`);
+    }
   }
 
   // 전날 종료 경기의 실제 점수와 적중 여부를 자동 반영합니다.

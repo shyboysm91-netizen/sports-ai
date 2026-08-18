@@ -1,5 +1,8 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import AnalysisClient from "./AnalysisClient";
+
+export const metadata: Metadata = { robots: { index: false, follow: true } };
 
 export default async function FootballGamePage({ searchParams }: { searchParams: Promise<Record<string,string|string[]|undefined>> }) {
   const q=await searchParams; const text=(key:string)=>typeof q[key]==="string"?q[key] as string:"";
