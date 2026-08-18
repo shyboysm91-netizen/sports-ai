@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { dataCacheUrl } from "../lib/client-data-cache";
 
 type LeagueKey = "all" | "epl" | "laliga" | "bundesliga" | "seriea" | "kleague";
 type Game = { id:string; league:string; leagueName:string; date:string; time:string; home:string; away:string; homeId:string; awayId:string; homeScore:string|null; awayScore:string|null; venue:string; status:string };
@@ -12,7 +13,7 @@ function koreaDate(offset = 0) { const now = new Date(); now.setDate(now.getDate
 export default function FootballClient() {
   const [date,setDate] = useState(koreaDate()); const [league,setLeague] = useState<LeagueKey>("all");
   const [games,setGames] = useState<Game[]>([]); const [errors,setErrors] = useState<string[]>([]); const [loading,setLoading] = useState(true);
-  useEffect(()=>{ let active=true; setLoading(true); fetch(`/api/football?date=${date}${league === "all" ? "" : `&league=${league}`}`).then(r=>r.json()).then(data=>{if(active){setGames(data.games??[]);setErrors(data.errors??[])}}).catch(()=>{if(active)setErrors(["축구 일정을 불러오지 못했습니다."])}).finally(()=>{if(active)setLoading(false)}); return()=>{active=false}; },[date,league]);
+  useEffect(()=>{ let active=true; setLoading(true); const path=`/api/football?date=${date}${league === "all" ? "" : `&league=${league}`}`; fetch(dataCacheUrl(path,900),{cache:"no-store"}).then(r=>r.json()).then(data=>{if(active){setGames(data.games??[]);setErrors(data.errors??[])}}).catch(()=>{if(active)setErrors(["축구 일정을 불러오지 못했습니다."])}).finally(()=>{if(active)setLoading(false)}); return()=>{active=false}; },[date,league]);
   const title = useMemo(()=>leagues.find(item=>item.key===league)?.label ?? "전체",[league]);
   return <main className="min-h-screen bg-[#020817] text-white">
     <header className="border-b border-slate-800 bg-[#050b19]"><div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5"><Link href="/football" className="text-2xl font-black">장군 AI 축구</Link><Link href="/" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300">야구 홈</Link></div></header>

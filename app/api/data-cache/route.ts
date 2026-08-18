@@ -8,7 +8,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_PREFIXES = ["/api/kbo", "/api/mlb", "/api/npb", "/api/betman"];
+const ALLOWED_PREFIXES = ["/api/kbo", "/api/mlb", "/api/npb", "/api/betman", "/api/football"];
 
 function safePath(value: string) {
   if (!value.startsWith("/api/")) return false;

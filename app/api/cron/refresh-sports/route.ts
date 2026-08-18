@@ -115,6 +115,15 @@ export async function GET(request: Request) {
     }
   }
 
+  // 축구는 앞으로 8일치 일정만 매일 미리 저장합니다. 상세 분석은 첫 조회 때
+  // sports_cache에 저장되므로 모든 경기를 미리 분석해 외부 API를 소모하지 않습니다.
+  const footballDates = Array.from({ length: 8 }, (_, index) => kstDate(index));
+  for (const date of footballDates) {
+    const path = `/api/football?date=${date}`;
+    const schedule = await cachedJson(origin, path, 21600);
+    results.push({ path, ok: Boolean(schedule), status: schedule ? 200 : 500 });
+  }
+
   // 전날 종료 경기의 실제 점수와 적중 여부를 자동 반영합니다.
   const resultResponse = await fetch(`${origin}/api/predictions/results`, {
     method: "POST",
