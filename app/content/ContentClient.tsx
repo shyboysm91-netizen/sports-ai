@@ -323,7 +323,9 @@ export default function ContentPage() {
         "video/webm",
       ];
       const mimeType = mimeCandidates.find((value) => MediaRecorder.isTypeSupported(value)) || "video/webm";
-      const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 8_000_000, audioBitsPerSecond: 192_000 });
+      // Telegram approval requests pass through the 4 MB server-body limit.
+      // Keep an 18-second reel near 2 MB so browsers that overshoot the requested bitrate still fit.
+      const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 850_000, audioBitsPerSecond: 64_000 });
       const chunks: BlobPart[] = [];
       recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
       const finished = new Promise<Blob>((resolve, reject) => {
@@ -381,7 +383,8 @@ export default function ContentPage() {
       setReelBlob(blob); setReelUrl(url); setReelProgress(100);
       const reelExtension = (blob.type || mimeType).includes("mp4") ? "mp4" : "webm";
       setYoutubeFile(new File([blob], `sports-ai-${data.league}-${data.away}-${data.home}-reels.${reelExtension}`, { type: blob.type || mimeType }));
-      setAutomationMessage(reelExtension === "mp4" ? "릴스 생성 완료. YouTube와 Instagram 자동 업로드에 사용할 수 있습니다." : "릴스 생성 완료. 현재 브라우저는 WebM만 지원하므로 YouTube 업로드는 가능하지만 Instagram은 MP4 생성이 가능한 최신 Chrome에서 다시 생성해야 합니다.");
+      const reelSizeMb = (blob.size / 1024 / 1024).toFixed(1);
+      setAutomationMessage(reelExtension === "mp4" ? `릴스 생성 완료 (${reelSizeMb}MB). YouTube와 Instagram 자동 업로드에 사용할 수 있습니다.` : `릴스 생성 완료 (${reelSizeMb}MB). 현재 브라우저는 WebM만 지원하므로 YouTube 업로드는 가능하지만 Instagram은 MP4 생성이 가능한 최신 Chrome에서 다시 생성해야 합니다.`);
       objectUrls = [];
     } catch (error) {
       setAutomationMessage(error instanceof Error ? error.message : "릴스 영상 생성에 실패했습니다.");
