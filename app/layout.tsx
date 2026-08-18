@@ -117,7 +117,7 @@ export default function RootLayout({
           content="f641b1723e56622a70a6e827f2e80dd133b8a0d5"
         />
       </head>
-      <body className="min-h-full flex flex-col">
+      <body suppressHydrationWarning className="min-h-full flex flex-col">
         <AdSenseSafeLoader />
         <Script async src="https://www.googletagmanager.com/gtag/js?id=G-XHP41FCMNQ" />
         <Script id="ga4">{`window.dataLayer = window.dataLayer || []; function gtag(){dataLayer.push(arguments);} gtag('js', new Date()); gtag('config', 'G-XHP41FCMNQ');`}</Script>

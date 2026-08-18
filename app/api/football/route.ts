@@ -23,6 +23,8 @@ const TEAM_KO: Record<string, string> = {
 const KLEAGUE_TEAM_KO: Record<string,string> = {
   GANGWON:"강원FC",BUCHEON:"부천FC",JEONBUK:"전북 현대",SEOUL:"FC서울",POHANG:"포항 스틸러스",GIMCHEON:"김천 상무",ULSAN:"울산 HD",ANYANG:"FC안양",DAEJEON:"대전 하나시티즌",GWANGJU:"광주FC",DAEGU:"대구FC",SUWONFC:"수원FC",JEJU:"제주 SK",INCHEON:"인천 유나이티드",
 };
+Object.assign(TEAM_KO,{"Paris Saint-Germain":"파리 생제르맹","Blackburn Rovers":"블랙번 로버스","Sheffield Wednesday":"셰필드 웬즈데이","Hull City":"헐 시티","Derby County":"더비 카운티","Swansea City":"스완지 시티","AS Monaco":"AS 모나코",Espanyol:"에스파뇰",Watford:"왓퍼드",Wrexham:"렉섬",Portsmouth:"포츠머스",Como:"코모"});
+Object.assign(TEAM_KO,{Deportivo:"데포르티보 라코루냐","Deportivo La Coruña":"데포르티보 라코루냐","Genoa CFC":"제노아",Genoa:"제노아",Fiorentina:"피오렌티나","ACF Fiorentina":"피오렌티나","Las Palmas":"라스팔마스","Real Valladolid":"레알 바야돌리드","FC Andorra":"FC 안도라",Cádiz:"카디스",Cadiz:"카디스",Leganés:"레가네스",Leganes:"레가네스",Burgos:"부르고스",Mirandés:"미란데스",Mirandes:"미란데스",Toulouse:"툴루즈",Elche:"엘체","Real Oviedo":"레알 오비에도","Racing Santander":"라싱 산탄데르"});
 
 function validDate(value: string | null) {
   return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
@@ -38,19 +40,10 @@ function statusKo(type: string, detail: string) {
 async function espnGames(league: LeagueKey, date: string) {
   const code = LEAGUES[league].espn;
   if (!code) return [];
-  const response = await fetch(`https://cdn.espn.com/core/soccer/scoreboard?xhr=1&league=${code}&dates=${date.replaceAll("-", "")}`, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
-      Accept: "application/json,text/plain,*/*",
-      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-      Origin: "https://www.espn.com",
-      Referer: "https://www.espn.com/",
-    },
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(`축구 일정 조회 실패 (${response.status})`);
-  const data = await response.json();
-  return (data?.content?.sbData?.events ?? []).map((event: any) => {
+  const target = new Date(`${date}T00:00:00Z`), days=[-1,0].map(offset=>{const d=new Date(target);d.setUTCDate(d.getUTCDate()+offset);return d.toISOString().slice(0,10).replaceAll("-","")});
+  const fetchDay=async(day:string)=>{const path=`site.api.espn.com/apis/site/v2/sports/soccer/${code}/scoreboard?dates=${day}`;const direct=await fetch(`https://${path}`,{headers:{"User-Agent":"Mozilla/5.0","Accept-Language":"ko-KR,ko;q=0.9,en;q=0.7"},cache:"no-store"}).catch(()=>null);if(direct?.ok)return direct.json();const proxy=await fetch(`https://r.jina.ai/http://${path}`,{cache:"no-store"});if(!proxy.ok)throw new Error(`축구 일정 조회 실패 (${proxy.status})`);const raw=await proxy.text(),start=raw.indexOf("{");if(start<0)throw new Error("축구 일정 응답 해석 실패");return JSON.parse(raw.slice(start))};
+  const payloads=await Promise.all(days.map(fetchDay)),events=Array.from(new Map(payloads.flatMap(data=>data?.events??[]).map((event:any)=>[String(event.id),event])).values()) as any[];
+  return events.map((event: any) => {
     const competition = event.competitions?.[0] ?? {};
     const home = competition.competitors?.find((item: any) => item.homeAway === "home");
     const away = competition.competitors?.find((item: any) => item.homeAway === "away");
@@ -68,7 +61,7 @@ async function espnGames(league: LeagueKey, date: string) {
       venue: competition.venue?.fullName ?? "경기장 미정",
       status: statusKo(statusType, event.status?.type?.shortDetail),
     };
-  });
+  }).filter((game:any)=>game.date===date);
 }
 
 async function kLeagueGames(date: string) {
