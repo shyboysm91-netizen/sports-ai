@@ -38,7 +38,7 @@ function statusKo(type: string, detail: string) {
 async function espnGames(league: LeagueKey, date: string) {
   const code = LEAGUES[league].espn;
   if (!code) return [];
-  const response = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${code}/scoreboard?dates=${date.replaceAll("-", "")}`, {
+  const response = await fetch(`https://cdn.espn.com/core/soccer/scoreboard?xhr=1&league=${code}&dates=${date.replaceAll("-", "")}`, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
       Accept: "application/json,text/plain,*/*",
@@ -50,13 +50,13 @@ async function espnGames(league: LeagueKey, date: string) {
   });
   if (!response.ok) throw new Error(`축구 일정 조회 실패 (${response.status})`);
   const data = await response.json();
-  return (data.events ?? []).map((event: any) => {
+  return (data?.content?.sbData?.events ?? []).map((event: any) => {
     const competition = event.competitions?.[0] ?? {};
     const home = competition.competitors?.find((item: any) => item.homeAway === "home");
     const away = competition.competitors?.find((item: any) => item.homeAway === "away");
     const kickoff = new Date(event.date);
     return {
-      id: String(event.id), league, leagueName: LEAGUES[league].name,
+      id: String(event.id ?? event.uid), league, leagueName: LEAGUES[league].name,
       date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(kickoff),
       time: new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(kickoff),
       home: TEAM_KO[home?.team?.displayName] ?? home?.team?.displayName ?? "홈팀",
