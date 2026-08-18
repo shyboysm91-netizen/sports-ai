@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type LeagueKey = "all" | "epl" | "laliga" | "bundesliga" | "seriea" | "kleague";
-type Game = { id:string; league:string; leagueName:string; date:string; time:string; home:string; away:string; homeScore:string|null; awayScore:string|null; venue:string; status:string };
+type Game = { id:string; league:string; leagueName:string; date:string; time:string; home:string; away:string; homeId:string; awayId:string; homeScore:string|null; awayScore:string|null; venue:string; status:string };
 const leagues: { key:LeagueKey; label:string }[] = [{key:"all",label:"전체"},{key:"epl",label:"프리미어리그"},{key:"laliga",label:"라리가"},{key:"bundesliga",label:"분데스리가"},{key:"seriea",label:"세리에 A"},{key:"kleague",label:"K리그1"}];
 
 function koreaDate(offset = 0) { const now = new Date(); now.setDate(now.getDate() + offset); return new Intl.DateTimeFormat("en-CA", { timeZone:"Asia/Seoul" }).format(now); }
@@ -26,7 +26,7 @@ export default function FootballClient() {
       <div className="mt-6 grid gap-5 md:grid-cols-2">{games.map(game=><article key={`${game.league}-${game.id}`} className="overflow-hidden rounded-2xl border border-slate-700 bg-[#0f172a]">
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4"><span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-black text-emerald-300">{game.leagueName}</span><div className="text-right"><p className="font-black">{game.time}</p><p className="text-xs text-slate-500">{game.venue}</p></div></div>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-5 py-7 text-center"><div><p className="text-xs text-slate-500">홈팀</p><h3 className="mt-2 text-xl font-black">{game.home}</h3></div><div><p className="text-xs font-bold text-emerald-300">{game.status}</p><div className="mt-2 rounded-full border border-slate-700 px-3 py-2 font-black">{game.homeScore!=null?`${game.homeScore} : ${game.awayScore}`:"VS"}</div></div><div><p className="text-xs text-slate-500">원정팀</p><h3 className="mt-2 text-xl font-black">{game.away}</h3></div></div>
-        <Link href={`/football-game?league=${encodeURIComponent(game.leagueName)}&date=${date}&home=${encodeURIComponent(game.home)}&away=${encodeURIComponent(game.away)}&time=${encodeURIComponent(game.time)}&venue=${encodeURIComponent(game.venue)}`} className="m-5 mt-0 block rounded-xl bg-emerald-500 py-3 text-center font-black text-slate-950">경기 분석 보기</Link>
+        <Link href={`/football-game?league=${game.league}&leagueName=${encodeURIComponent(game.leagueName)}&gameId=${encodeURIComponent(game.id)}&date=${date}&home=${encodeURIComponent(game.home)}&away=${encodeURIComponent(game.away)}&homeId=${encodeURIComponent(game.homeId)}&awayId=${encodeURIComponent(game.awayId)}&time=${encodeURIComponent(game.time)}&venue=${encodeURIComponent(game.venue)}`} className="m-5 mt-0 block rounded-xl bg-emerald-500 py-3 text-center font-black text-slate-950">경기 분석 보기</Link>
       </article>)}</div>
     </section>
   </main>;
