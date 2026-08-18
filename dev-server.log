@@ -1,0 +1,26 @@
+
+> sports-ai@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.10 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.10.117:3000
+- Environments: .env.local
+✓ Ready in 1894ms
+
+ GET / 200 in 6.1s (next.js: 460ms, application-code: 5.7s)
+ GET /api/kbo?date=2026-08-11 200 in 1139ms (next.js: 765ms, application-code: 374ms)
+ HEAD / 200 in 61ms (next.js: 12ms, application-code: 49ms)
+ HEAD /results 200 in 983ms (next.js: 80ms, application-code: 903ms)
+✓ Compiled in 5s
+ GET / 200 in 538ms (next.js: 183ms, application-code: 355ms)
+ GET / 200 in 200ms (next.js: 31ms, application-code: 169ms)
+ GET / 200 in 76ms (next.js: 14ms, application-code: 62ms)
+ GET /api/kbo?date=2026-08-11 200 in 256ms (next.js: 112ms, application-code: 144ms)
+ GET /api/kbo?date=2026-08-11 200 in 392ms (next.js: 16ms, application-code: 377ms)
+ HEAD / 200 in 18.7s (next.js: 7.1s, application-code: 11.5s)
+ GET /api/kbo?date=2026-08-12 200 in 736ms (next.js: 159ms, application-code: 577ms)
+ GET /api/kbo?date=2026-08-10 200 in 256ms (next.js: 7ms, application-code: 249ms)
+ GET /api/mlb?date=2026-08-10 200 in 946ms (next.js: 143ms, application-code: 802ms)
+ GET /api/data-cache?path=%2Fapi%2Fmlb%3Fdate%3D2026-08-10&ttl=300 200 in 3.3s (next.js: 205ms, application-code: 3.1s)
+[?25h
