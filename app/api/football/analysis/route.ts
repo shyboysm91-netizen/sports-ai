@@ -4,7 +4,7 @@ export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 const ESPN_CODES: Record<string,string> = { epl:"eng.1", laliga:"esp.1", bundesliga:"ger.1", seriea:"ita.1" };
-const TEAM_KO: Record<string,string> = { Arsenal:"아스널","Coventry City":"코번트리 시티","Manchester City":"맨체스터 시티","Manchester United":"맨체스터 유나이티드",Liverpool:"리버풀",Chelsea:"첼시","Tottenham Hotspur":"토트넘 홋스퍼",Girona:"지로나","Real Betis":"레알 베티스","Borussia Dortmund":"보루시아 도르트문트",Como:"코모" };
+const TEAM_KO: Record<string,string> = { Arsenal:"아스널","Coventry City":"코번트리 시티","Manchester City":"맨체스터 시티","Manchester United":"맨체스터 유나이티드",Liverpool:"리버풀",Chelsea:"첼시","Tottenham Hotspur":"토트넘 홋스퍼",Girona:"지로나","Real Betis":"레알 베티스","Borussia Dortmund":"보루시아 도르트문트",Como:"코모","AS Monaco":"AS 모나코",Espanyol:"에스파뇰",Watford:"왓퍼드",Wrexham:"렉섬",Portsmouth:"포츠머스" };
 type Recent = { date:string; opponent:string; result:string; score:string; competition:string };
 
 const browserHeaders = { "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36", Accept:"application/json,text/plain,*/*", "Accept-Language":"ko-KR,ko;q=0.9,en;q=0.7" };
@@ -21,11 +21,12 @@ async function fetchEspnSummary(code:string, gameId:string) {
 }
 
 function recentFromEspn(group:any):Recent[] {
-  return (group?.events??[]).slice(-5).reverse().map((event:any)=>({
+  const teamId=String(group?.team?.id??"");
+  return (group?.events??[]).slice(-5).reverse().map((event:any)=>{const isHome=String(event.homeTeamId)===teamId;const gf=String(isHome?event.homeTeamScore:event.awayTeamScore);const ga=String(isHome?event.awayTeamScore:event.homeTeamScore);return{
     date:new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Seoul"}).format(new Date(event.gameDate)),
     opponent:TEAM_KO[event.opponent?.displayName]??event.opponent?.displayName??"상대팀",
-    result:event.gameResult==="W"?"승":event.gameResult==="L"?"패":"무", score:event.score??"-", competition:event.leagueAbbreviation??event.competitionName??"",
-  }));
+    result:event.gameResult==="W"?"승":event.gameResult==="L"?"패":"무", score:gf!=="undefined"&&ga!=="undefined"?`${gf}-${ga}`:event.score??"-", competition:event.leagueAbbreviation??event.competitionName??"",
+  }});
 }
 
 function formStats(games:Recent[]) {
@@ -71,8 +72,11 @@ async function espnAnalysis(params:URLSearchParams) {
   const homeRecent=recentFromEspn((data.lastFiveGames??[]).find((x:any)=>String(x.team?.id)===homeId)); const awayRecent=recentFromEspn((data.lastFiveGames??[]).find((x:any)=>String(x.team?.id)===awayId));
   const h2h=(data.seasonseries??[]).flatMap((series:any)=>(series.events??[]).map((event:any)=>({date:event.date?new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Seoul"}).format(new Date(event.date)):"",opponent:`${home} vs ${away}`,result:"",score:event.competitors?.map((c:any)=>c.score?.displayValue??c.score).join("-")??"-",competition:series.title??"상대전적"}))).slice(-5).reverse();
   const homeStanding=standingFor(data.standings,homeId),awayStanding=standingFor(data.standings,awayId); const homeForm=formStats(homeRecent),awayForm=formStats(awayRecent);
-  const odds=(data.pickcenter??data.odds??[])[0];
-  return {home,away,homeId,awayId,homeRecent,awayRecent,h2h,homeForm,awayForm,homeStanding,awayStanding,market:odds?{details:odds.details??odds.spread??null,overUnder:odds.overUnder??null,provider:odds.provider?.name??null}:null,expert:expert(home,away,homeForm,awayForm,homeStanding,awayStanding,h2h),source:"ESPN 경기 상세·리그 순위"};
+  const odds=(data.pickcenter??data.odds??[])[0]; const market=odds?{details:odds.details??odds.spread??null,overUnder:odds.overUnder??null,provider:odds.provider?.name??null}:null;
+  const expertView=expert(home,away,homeForm,awayForm,homeStanding,awayStanding,h2h); const marketDetail=String(market?.details??""); const homeAbbr=String(homeComp?.team?.abbreviation??""); const awayAbbr=String(awayComp?.team?.abbreviation??"");
+  if(/-\d+/.test(marketDetail)&&homeAbbr&&marketDetail.startsWith(homeAbbr)){expertView.lean=`${home} 우세`;expertView.confidence="높음";expertView.reasons.push(`시장 기준 ${marketDetail}로 홈팀 우세 반영`);expertView.summary=`최근 흐름은 양 팀 모두 좋지만 시장 기준과 홈 이점을 함께 보면 ${home} 우세 구도입니다. ${expertView.goalView} 선발 명단과 당일 부상 변수는 추가 확인이 필요합니다.`}
+  else if(/-\d+/.test(marketDetail)&&awayAbbr&&marketDetail.startsWith(awayAbbr)){expertView.lean=`${away} 우세`;expertView.confidence="높음";expertView.reasons.push(`시장 기준 ${marketDetail}로 원정팀 우세 반영`);expertView.summary=`최근 흐름과 시장 기준을 함께 보면 ${away} 우세 구도입니다. ${expertView.goalView} 선발 명단과 당일 부상 변수는 추가 확인이 필요합니다.`}
+  return {home,away,homeId,awayId,homeRecent,awayRecent,h2h,homeForm,awayForm,homeStanding,awayStanding,market,expert:expertView,source:"ESPN 경기 상세·리그 순위"};
 }
 
 async function fetchKMonth(year:string,month:string){const r=await fetch("https://www.kleague.com/getScheduleList.do",{method:"POST",headers:{"content-type":"application/json; charset=utf-8",accept:"application/json","user-agent":"Janggun-AI/1.0"},body:JSON.stringify({year,month,leagueId:1}),cache:"no-store"});if(!r.ok)throw new Error(`K리그 일정 조회 실패 (${r.status})`);const d=await r.json();return d.data??d}
