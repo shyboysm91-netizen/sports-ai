@@ -22,10 +22,10 @@ async function fetchEspnSummary(code:string, gameId:string) {
 
 function recentFromEspn(group:any):Recent[] {
   const teamId=String(group?.team?.id??"");
-  return (group?.events??[]).slice(-5).reverse().map((event:any)=>{const isHome=String(event.homeTeamId)===teamId;const gf=String(isHome?event.homeTeamScore:event.awayTeamScore);const ga=String(isHome?event.awayTeamScore:event.homeTeamScore);return{
+  return (group?.events??[]).slice(-5).reverse().map((event:any)=>{const isHome=String(event.homeTeamId)===teamId;let gf=Number(isHome?event.homeTeamScore:event.awayTeamScore);let ga=Number(isHome?event.awayTeamScore:event.homeTeamScore);if((event.gameResult==="W"&&gf<ga)||(event.gameResult==="L"&&gf>ga))[gf,ga]=[ga,gf];return{
     date:new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Seoul"}).format(new Date(event.gameDate)),
     opponent:TEAM_KO[event.opponent?.displayName]??event.opponent?.displayName??"상대팀",
-    result:event.gameResult==="W"?"승":event.gameResult==="L"?"패":"무", score:gf!=="undefined"&&ga!=="undefined"?`${gf}-${ga}`:event.score??"-", competition:event.leagueAbbreviation??event.competitionName??"",
+    result:event.gameResult==="W"?"승":event.gameResult==="L"?"패":"무", score:Number.isFinite(gf)&&Number.isFinite(ga)?`${gf}-${ga}`:event.score??"-", competition:event.leagueAbbreviation??event.competitionName??"",
   }});
 }
 
