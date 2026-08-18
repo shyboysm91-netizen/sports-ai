@@ -38,7 +38,16 @@ function statusKo(type: string, detail: string) {
 async function espnGames(league: LeagueKey, date: string) {
   const code = LEAGUES[league].espn;
   if (!code) return [];
-  const response = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${code}/scoreboard?dates=${date.replaceAll("-", "")}`, { headers: { "User-Agent": "Janggun-AI/1.0" }, cache: "no-store" });
+  const response = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/${code}/scoreboard?dates=${date.replaceAll("-", "")}`, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36",
+      Accept: "application/json,text/plain,*/*",
+      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+      Origin: "https://www.espn.com",
+      Referer: "https://www.espn.com/",
+    },
+    cache: "no-store",
+  });
   if (!response.ok) throw new Error(`축구 일정 조회 실패 (${response.status})`);
   const data = await response.json();
   return (data.events ?? []).map((event: any) => {
