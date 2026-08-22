@@ -116,7 +116,8 @@ export default function HomeClient({
 
         const endpoint =
           league === "KBO" ? "/api/kbo" : league === "MLB" ? "/api/mlb" : "/api/npb";
-        const sourcePath = `${endpoint}?date=${encodeURIComponent(selectedDate)}`;
+        const nameVersion = league === "MLB" || league === "NPB" ? "&nameVersion=3" : "";
+        const sourcePath = `${endpoint}?date=${encodeURIComponent(selectedDate)}${nameVersion}`;
         // KBO/NPB 예고 선발은 경기 당일까지 자주 갱신되므로 오래된 브라우저 캐시를 사용하지 않습니다.
         // MLB는 공식 probable pitcher API 응답을 5분만 재사용합니다.
         const requestUrl = league === "MLB" ? dataCacheUrl(sourcePath, 300) : sourcePath;

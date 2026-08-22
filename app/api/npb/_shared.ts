@@ -120,6 +120,25 @@ const NAME_OVERRIDES: Record<string,string> = {
   "Wingenter, Trey":"트레이 윙엔터","Castillo, Jose":"호세 카스티요","Jackson, Andre":"안드레 잭슨","Long, Sam":"샘 롱","Lucchesi, Joey":"조이 루체시",
   "Itoh, Hiromi":"이토 히로미","Kuri, Allen":"쿠리 아렌","Moinelo, Livan":"모이넬로","Moinelo":"모이넬로"
 };
+
+const NPB_PITCHER_KO_BY_CODE: Record<string,string> = {
+  "41245151":"다마무라 쇼고",
+  "11015155":"요기 야마토",
+  "31935150":"케사마루 유키",
+  "11415150":"다케다 유",
+  "01805152":"마스이 쇼타",
+  "13915150":"카일 뮬러",
+  "21025155":"스미다 치히로",
+  "31835153":"하야카와 다카히사",
+  "01205155":"다쓰 고타",
+  "43745159":"안드레 잭슨",
+  "61065159":"다카시마 다이토",
+  "01305157":"오쓰 료스케",
+  "03105159":"마쓰모토 겐고",
+  "63165134":"야나기 유야",
+  "81985157":"소야 류헤이",
+  "41845157":"마쓰모토 하루",
+};
 const ROMAJI: [string,string][] = [
  ["kyo","쿄"],["kyu","큐"],["kya","캬"],["sho","쇼"],["shu","슈"],["sha","샤"],["cho","초"],["chu","추"],["cha","차"],["ryo","료"],["ryu","류"],["rya","랴"],["nyo","뇨"],["nyu","뉴"],["nya","냐"],["hyo","효"],["hyu","휴"],["hya","햐"],["myo","묘"],["myu","뮤"],["mya","먀"],["gyo","교"],["gyu","규"],["gya","갸"],["byo","뵤"],["byu","뷰"],["bya","뱌"],["pyo","표"],["pyu","퓨"],["pya","퍄"],["tsu","쓰"],["shi","시"],["chi","치"],["fu","후"],["ji","지"],
  ["ka","카"],["ki","키"],["ku","쿠"],["ke","케"],["ko","코"],["ga","가"],["gi","기"],["gu","구"],["ge","게"],["go","고"],["sa","사"],["su","스"],["se","세"],["so","소"],["za","자"],["zu","즈"],["ze","제"],["zo","조"],["ta","타"],["te","테"],["to","토"],["da","다"],["de","데"],["do","도"],["na","나"],["ni","니"],["nu","누"],["ne","네"],["no","노"],["ha","하"],["hi","히"],["he","헤"],["ho","호"],["ba","바"],["bi","비"],["bu","부"],["be","베"],["bo","보"],["pa","파"],["pi","피"],["pu","푸"],["pe","페"],["po","포"],["ma","마"],["mi","미"],["mu","무"],["me","메"],["mo","모"],["ya","야"],["yu","유"],["yo","요"],["ra","라"],["ri","리"],["ru","루"],["re","레"],["ro","로"],["wa","와"],["wo","오"],["a","아"],["i","이"],["u","우"],["e","에"],["o","오"],["n","ㄴ"]
@@ -141,4 +160,8 @@ export function playerNameKo(name:string){
  if(/[一-龯ぁ-んァ-ヶ]/.test(clean)) return clean;
  const parts=clean.split(",").map(x=>x.trim()).filter(Boolean); const ordered=parts.length===2?[parts[0],...parts[1].split(/\s+/)]:clean.split(/\s+/);
  return ordered.map(romanTokenToKo).join(" ");
+}
+
+export function playerNameKoByCode(name:string, playerCode?:string){
+ return NPB_PITCHER_KO_BY_CODE[String(playerCode??"")] ?? playerNameKo(name);
 }

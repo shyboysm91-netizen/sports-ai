@@ -16,7 +16,7 @@ function escapeXml(value: string) {
 }
 
 async function games(date: string) {
-  const path = `/api/football?date=${date}`;
+  const path = `/api/football?date=${date}&scheduleVersion=3`;
   const url = `${BASE_URL}/api/data-cache?path=${encodeURIComponent(path)}&ttl=21600`;
   const response = await fetch(url, { next: { revalidate: 1800 }, signal: AbortSignal.timeout(20000) });
   if (!response.ok) return [];

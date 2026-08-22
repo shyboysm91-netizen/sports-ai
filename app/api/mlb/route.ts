@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { MLB_TEAM_KO_BY_ID, MLB_VENUE_KO, playerNameKo } from "../../lib/mlb-ko";
+import { MLB_TEAM_KO_BY_ID, MLB_VENUE_KO, playerNameKoAuto } from "../../lib/mlb-ko";
 
 type MlbTeam = { id?: number; name?: string };
 type MlbPerson = { id?: number; fullName?: string };
@@ -118,8 +118,8 @@ export async function GET(request: Request) {
           awayTeamId: game.teams?.away?.team?.id ?? 0,
           homeTeamId: game.teams?.home?.team?.id ?? 0,
           stadium: MLB_VENUE_KO[game.venue?.name ?? ""] ?? game.venue?.name ?? "",
-          awayStarter: playerNameKo(game.teams?.away?.probablePitcher?.fullName ?? ""),
-          homeStarter: playerNameKo(game.teams?.home?.probablePitcher?.fullName ?? ""),
+          awayStarter: game.teams?.away?.probablePitcher?.fullName ?? "",
+          homeStarter: game.teams?.home?.probablePitcher?.fullName ?? "",
           awayStarterCode: String(game.teams?.away?.probablePitcher?.id ?? ""),
           homeStarterCode: String(game.teams?.home?.probablePitcher?.id ?? ""),
           status: game.status?.detailedState ?? game.status?.abstractGameState ?? "Scheduled",
@@ -138,8 +138,13 @@ export async function GET(request: Request) {
         });
       }
     }
-    games.sort((a, b) => a.commenceTime.localeCompare(b.commenceTime));
-    return NextResponse.json({ success: true, source: "MLB Stats API", date, count: games.length, games });
+    const localizedGames = await Promise.all(games.map(async (game) => ({
+      ...game,
+      awayStarter: await playerNameKoAuto(game.awayStarter, game.awayStarterCode),
+      homeStarter: await playerNameKoAuto(game.homeStarter, game.homeStarterCode),
+    })));
+    localizedGames.sort((a, b) => a.commenceTime.localeCompare(b.commenceTime));
+    return NextResponse.json({ success: true, source: "MLB Stats API", date, count: localizedGames.length, games: localizedGames });
   } catch (error) {
     return NextResponse.json({
       success: false,

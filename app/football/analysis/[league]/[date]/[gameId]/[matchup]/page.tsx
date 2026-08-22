@@ -12,6 +12,10 @@ const LEAGUE_NAMES: Record<string, string> = {
   laliga: "라리가",
   bundesliga: "분데스리가",
   seriea: "세리에 A",
+  ucl: "UEFA 챔피언스리그",
+  uel: "UEFA 유로파리그",
+  uecl: "UEFA 컨퍼런스리그",
+  mls: "미국 MLS",
   kleague: "K리그1",
 };
 

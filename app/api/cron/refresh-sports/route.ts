@@ -119,7 +119,7 @@ export async function GET(request: Request) {
   // sports_cache에 저장되므로 모든 경기를 미리 분석해 외부 API를 소모하지 않습니다.
   const footballDates = Array.from({ length: 8 }, (_, index) => kstDate(index));
   for (const date of footballDates) {
-    const path = `/api/football?date=${date}`;
+    const path = `/api/football?date=${date}&scheduleVersion=3`;
     const schedule = await cachedJson(origin, path, 21600);
     results.push({ path, ok: Boolean(schedule), status: schedule ? 200 : 500 });
     for (const game of gameArray(schedule)) {

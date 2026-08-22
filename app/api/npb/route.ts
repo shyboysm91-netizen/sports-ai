@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { playerNameKo } from "./_shared";
+import { playerNameKo, playerNameKoByCode } from "./_shared";
 
 const TEAMS: Record<string,string> = {
   "Hanshin":"한신 타이거스","Yomiuri":"요미우리 자이언츠","DeNA":"요코하마 DeNA 베이스타스",
@@ -36,6 +36,29 @@ function decodeHtml(value: string) {
 }
 
 type OfficialStarter = { name: string; playerCode: string };
+
+async function officialStarterNameKo(name: string, playerCode: string) {
+  const fixed = playerNameKoByCode(name, playerCode);
+  if (fixed && !/[一-龯ぁ-んァ-ヶ]/.test(fixed)) return fixed;
+  if (!playerCode) return fixed;
+  try {
+    const response = await fetch(`https://npb.jp/bis/eng/players/${encodeURIComponent(playerCode)}.html`, {
+      headers: { "User-Agent": "Sports-AI/1.0", Accept: "text/html" },
+      next: { revalidate: 2592000 },
+      signal: AbortSignal.timeout(7000),
+    });
+    if (response.ok) {
+      const html = await response.text();
+      const english = html.match(/id=["']pc_v_name["'][^>]*>([^<]+)</i)?.[1]
+        ?? html.match(/title=["']([^"']+)["'][^>]*>/i)?.[1]
+        ?? "";
+      if (english) return playerNameKo(english.replace(/\s*,\s*/g, ", "));
+    }
+  } catch {
+    // 영문 공식 페이지 장애 시 기존 선수 코드/이름 변환 결과를 사용합니다.
+  }
+  return fixed;
+}
 
 const KNOWN_OFFICIAL_STARTERS: Record<string, Record<string, OfficialStarter>> = {
   // 8/11 공식 선발. 당일 경기가 시작되면 NPB 예고 선발 페이지가 다음 날로
@@ -538,15 +561,15 @@ export async function GET(req:Request){
     if (!officialStarters.has(team)) officialStarters.set(team, starter);
   }
   void storeStarters(date, officialStarters);
-  const mergedGames=mergeGameResults(games,espnResults).map((game:any) => {
+  const mergedGames=await Promise.all(mergeGameResults(games,espnResults).map(async (game:any) => {
     if (date === "2026-08-11" && game.awayApiName === "Hiroshima" && game.homeApiName === "Yakult") {
       return { ...game, status: "Canceled", starterStatus: "canceled" };
     }
     if (game.completed) return game;
     const awayOfficial = officialStarterForGame(officialStarters, game, "away");
     const homeOfficial = officialStarterForGame(officialStarters, game, "home");
-    const awayStarter = awayOfficial?.name || game.awayStarter || "";
-    const homeStarter = homeOfficial?.name || game.homeStarter || "";
+    const awayStarter = await officialStarterNameKo(awayOfficial?.name || game.awayStarter || "", awayOfficial?.playerCode || game.awayStarterCode || "");
+    const homeStarter = await officialStarterNameKo(homeOfficial?.name || game.homeStarter || "", homeOfficial?.playerCode || game.homeStarterCode || "");
     return {
       ...game,
       awayStarter,
@@ -561,7 +584,7 @@ export async function GET(req:Request){
       homeStarterCode: homeOfficial?.playerCode || game.homeStarterCode || "",
       starterStatus: awayStarter || homeStarter ? "announced" : game.starterStatus,
     };
-  });
+  }));
   return NextResponse.json({success:true,games:mergedGames,source:officialStarters.size?`${url} + NPB official announced starters`:espnResults.length?`${url} + ESPN scoreboard fallback`:url,count:mergedGames.length});
  }catch(e){
    return NextResponse.json({success:false,games:[],message:e instanceof Error?e.message:"NPB 일정 오류"},{status:500});

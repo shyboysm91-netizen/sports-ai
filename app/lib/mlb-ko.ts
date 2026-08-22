@@ -63,6 +63,40 @@ const CURRENT_MLB_PITCHER_KO: Record<string, string> = {
   "Tomoyuki Sugano": "스가노 도모유키",
 };
 
+// 일정 카드와 상세 화면이 같은 이름을 사용하도록 공식 MLB 선수 ID를 우선합니다.
+const MLB_PITCHER_KO_BY_ID: Record<number, string> = {
+  519242: "크리스 세일",
+  694819: "제이콥 미시오로스키",
+  690928: "헌터 도빈스",
+  666200: "헤수스 루사르도",
+  689254: "메이슨 플루하티",
+  693645: "캠 슐리틀러",
+  657277: "로건 웹",
+  543243: "소니 그레이",
+  695418: "브래드 로드",
+  687473: "라이언 구스토",
+  642547: "프레디 페랄타",
+  669432: "트레버 로저스",
+  640455: "션 머나야",
+  680732: "션 버크",
+  675512: "트로이 멜튼",
+  702070: "노아 캐머런",
+  669372: "J.T. 긴",
+  669713: "헤이든 웨스네스키",
+  672282: "리드 데트머스",
+  669022: "맥켄지 고어",
+  676282: "조이 칸티요",
+  685299: "태너 고든",
+  666157: "닉 로돌로",
+  593958: "에두아르도 로드리게스",
+  687570: "코너 프릴립",
+  681190: "랜디 바스케스",
+  696149: "버바 챈들러",
+  808967: "야마모토 요시노부",
+  571510: "매튜 보이드",
+  676106: "에머슨 행콕",
+};
+
 const PLAYER_NAME_KO: Record<string, string> = {
   "Christian Scott": "크리스티안 스콧", "Bryce Elder": "브라이스 엘더",
   "Trevor Rogers": "트레버 로저스", "Dean Kremer": "딘 크레머",
@@ -184,6 +218,35 @@ export function playerNameKo(name: string) {
     return PLAYER_NAME_KO[part] ?? (index === 0 ? FIRST[key] : LAST[key]) ?? part;
   });
   return mapped.map((part) => /[A-Za-z]/.test(part) ? fallbackPlayerTokenKo(part) : part).join(" ");
+}
+
+export function playerNameKoById(name: string, id?: number | string) {
+  const playerId = Number(id);
+  return MLB_PITCHER_KO_BY_ID[playerId] ?? playerNameKo(name);
+}
+
+export async function playerNameKoAuto(name: string, id?: number | string) {
+  if (!name) return "";
+  const fixed = MLB_PITCHER_KO_BY_ID[Number(id)];
+  if (fixed) return fixed;
+  const exact = CURRENT_MLB_PITCHER_KO[name] ?? PLAYER_NAME_KO[name];
+  if (exact) return exact;
+  if (/[가-힣]/.test(name) && !/[A-Za-z]/.test(name)) return name;
+  try {
+    const params = new URLSearchParams({ client: "gtx", sl: "en", tl: "ko", dt: "t", q: name });
+    const response = await fetch(`https://translate.googleapis.com/translate_a/single?${params}`, {
+      next: { revalidate: 2592000 },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (response.ok) {
+      const payload = await response.json();
+      const translated = Array.isArray(payload?.[0]) ? payload[0].map((row: unknown[]) => String(row?.[0] ?? "")).join("").trim() : "";
+      if (/[가-힣]/.test(translated) && !/[A-Za-z]/.test(translated)) return translated;
+    }
+  } catch {
+    // 외부 음역 서비스 장애 시 내부 이름 사전을 사용합니다.
+  }
+  return playerNameKo(name);
 }
 
 // MLB 전체 선수 명단은 매일 바뀌므로 사전에 없는 이름도 영문 그대로 노출하지 않는다.
