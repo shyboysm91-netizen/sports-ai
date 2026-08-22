@@ -172,6 +172,9 @@ export default function Home() {
             <Link href="/football" className="text-emerald-400 hover:text-emerald-300">
               축구
             </Link>
+            <Link href="/news" className="text-cyan-400 hover:text-cyan-300">
+              스포츠 뉴스
+            </Link>
           </nav>
         </div>
       </header>

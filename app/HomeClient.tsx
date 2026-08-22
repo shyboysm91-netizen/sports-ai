@@ -186,6 +186,8 @@ export default function HomeClient({
                 {item}
               </button>
             ))}
+            <Link href="/football" className="text-slate-500 hover:text-white">축구</Link>
+            <Link href="/news" className="text-cyan-400 hover:text-cyan-300">뉴스</Link>
           </nav>
         </div>
       </header>

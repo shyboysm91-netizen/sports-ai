@@ -21,6 +21,7 @@ function buildSitemapIndex() {
     `${BASE_URL}/sitemap-analysis.xml`,
     `${BASE_URL}/sitemap-football.xml`,
     `${BASE_URL}/sitemap-players.xml`,
+    `${BASE_URL}/news-sitemap.xml`,
   ];
 
   const entries = sitemaps

@@ -112,6 +112,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(brandJsonLd) }}
         />
         <link rel="alternate" type="application/rss+xml" title="장군 AI 경기 분석 RSS" href="/rss.xml" />
+        <link rel="alternate" type="application/rss+xml" title="장군분석 스포츠 뉴스 RSS" href="/news/rss.xml" />
         <meta
           name="naver-site-verification"
           content="f641b1723e56622a70a6e827f2e80dd133b8a0d5"

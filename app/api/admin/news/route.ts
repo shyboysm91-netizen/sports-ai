@@ -1,0 +1,7 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getNewsAutomationEnabled, listNews, setNewsAutomationEnabled } from "@/app/lib/news-db";
+import { generateOneNewsArticle } from "@/app/lib/news-generator";
+import { newsAdminAuthorized } from "@/app/lib/news-auth";
+export const dynamic="force-dynamic"; export const maxDuration=300;
+export async function GET(request:NextRequest){ if(!newsAdminAuthorized(request))return NextResponse.json({success:false,message:"관리자 인증 실패"},{status:401}); try{return NextResponse.json({success:true,enabled:await getNewsAutomationEnabled(),articles:await listNews({status:"all",limit:200})});}catch(e){return NextResponse.json({success:false,message:e instanceof Error?e.message:"조회 실패"},{status:500});}}
+export async function POST(request:NextRequest){ if(!newsAdminAuthorized(request))return NextResponse.json({success:false,message:"관리자 인증 실패"},{status:401}); try{const body=await request.json().catch(()=>({})); if(body.action==="toggle"){await setNewsAutomationEnabled(Boolean(body.enabled));return NextResponse.json({success:true,enabled:Boolean(body.enabled)});} if(body.action==="generate"){const result=await generateOneNewsArticle({force:true,status:body.status==="published"?"published":"draft"});return NextResponse.json({success:true,result});} return NextResponse.json({success:false,message:"지원하지 않는 작업"},{status:400});}catch(e){return NextResponse.json({success:false,message:e instanceof Error?e.message:"작업 실패"},{status:500});}}

@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/refresh-sports",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/cron/news",
+      "schedule": "30 22 * * *"
     }
   ]
 }

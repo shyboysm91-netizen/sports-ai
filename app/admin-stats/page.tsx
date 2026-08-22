@@ -188,7 +188,7 @@ export default function AdminStatsPage() {
       <header className="border-b border-slate-800">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
           <Link href="/" className="text-2xl font-black">장군 AI</Link>
-          <button onClick={() => { sessionStorage.removeItem("sports-ai-owner"); setUnlocked(false); }} className="text-sm font-black text-slate-400">잠금</button>
+          <div className="flex items-center gap-4"><Link href="/admin-news" className="text-sm font-black text-cyan-400">뉴스 관리</Link><button onClick={() => { sessionStorage.removeItem("sports-ai-owner"); setUnlocked(false); }} className="text-sm font-black text-slate-400">잠금</button></div>
         </div>
       </header>
 
