@@ -16,6 +16,7 @@ const LEAGUE_NAMES: Record<string, string> = {
   uel: "UEFA 유로파리그",
   uecl: "UEFA 컨퍼런스리그",
   mls: "미국 MLS",
+  jleague: "일본 J리그1",
   kleague: "K리그1",
 };
 

@@ -4,21 +4,21 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { dataCacheUrl } from "../lib/client-data-cache";
 
-type LeagueKey = "all" | "epl" | "laliga" | "bundesliga" | "seriea" | "ucl" | "uel" | "uecl" | "mls" | "kleague";
+type LeagueKey = "all" | "epl" | "laliga" | "bundesliga" | "seriea" | "ucl" | "uel" | "uecl" | "mls" | "jleague" | "kleague";
 type Game = { id:string; league:string; leagueName:string; date:string; time:string; home:string; away:string; homeId:string; awayId:string; homeScore:string|null; awayScore:string|null; venue:string; status:string };
-const leagues: { key:LeagueKey; label:string }[] = [{key:"all",label:"전체"},{key:"epl",label:"프리미어리그"},{key:"laliga",label:"라리가"},{key:"bundesliga",label:"분데스리가"},{key:"seriea",label:"세리에 A"},{key:"ucl",label:"챔피언스리그"},{key:"uel",label:"유로파리그"},{key:"uecl",label:"컨퍼런스리그"},{key:"mls",label:"MLS"},{key:"kleague",label:"K리그1"}];
+const leagues: { key:LeagueKey; label:string }[] = [{key:"all",label:"전체"},{key:"epl",label:"프리미어리그"},{key:"laliga",label:"라리가"},{key:"bundesliga",label:"분데스리가"},{key:"seriea",label:"세리에 A"},{key:"ucl",label:"챔피언스리그"},{key:"uel",label:"유로파리그"},{key:"uecl",label:"컨퍼런스리그"},{key:"mls",label:"MLS"},{key:"jleague",label:"J리그1"},{key:"kleague",label:"K리그1"}];
 
 function koreaDate(offset = 0) { const now = new Date(); now.setDate(now.getDate() + offset); return new Intl.DateTimeFormat("en-CA", { timeZone:"Asia/Seoul" }).format(now); }
 
 export default function FootballClient() {
   const [date,setDate] = useState(koreaDate()); const [league,setLeague] = useState<LeagueKey>("all");
   const [games,setGames] = useState<Game[]>([]); const [errors,setErrors] = useState<string[]>([]); const [loading,setLoading] = useState(true);
-  useEffect(()=>{ let active=true; setLoading(true); const path=`/api/football?date=${date}&scheduleVersion=3${league === "all" ? "" : `&league=${league}`}`; fetch(dataCacheUrl(path,900),{cache:"no-store"}).then(r=>r.json()).then(data=>{if(active){setGames(data.games??[]);setErrors(data.errors??[])}}).catch(()=>{if(active)setErrors(["축구 일정을 불러오지 못했습니다."])}).finally(()=>{if(active)setLoading(false)}); return()=>{active=false}; },[date,league]);
+  useEffect(()=>{ let active=true; setLoading(true); const path=`/api/football?date=${date}&scheduleVersion=4${league === "all" ? "" : `&league=${league}`}`; fetch(dataCacheUrl(path,900),{cache:"no-store"}).then(r=>r.json()).then(data=>{if(active){setGames(data.games??[]);setErrors(data.errors??[])}}).catch(()=>{if(active)setErrors(["축구 일정을 불러오지 못했습니다."])}).finally(()=>{if(active)setLoading(false)}); return()=>{active=false}; },[date,league]);
   const title = useMemo(()=>leagues.find(item=>item.key===league)?.label ?? "전체",[league]);
   return <main className="min-h-screen bg-[#020817] text-white">
     <header className="border-b border-slate-800 bg-[#050b19]"><div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5"><Link href="/football" className="text-2xl font-black">장군 AI 축구</Link><Link href="/" className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300">야구 홈</Link></div></header>
     <section className="mx-auto max-w-6xl px-5 py-10">
-      <p className="text-sm font-bold tracking-[0.22em] text-emerald-400">AI FOOTBALL SCHEDULE</p><h1 className="mt-3 text-4xl font-black">오늘의 {title} 경기 일정</h1><p className="mt-3 text-slate-400">유럽 주요 리그와 UEFA 대회, 미국 MLS, K리그1 일정을 한국시간으로 제공합니다.</p>
+      <p className="text-sm font-bold tracking-[0.22em] text-emerald-400">AI FOOTBALL SCHEDULE</p><h1 className="mt-3 text-4xl font-black">오늘의 {title} 경기 일정</h1><p className="mt-3 text-slate-400">유럽 주요 리그와 UEFA 대회, 미국 MLS, 일본 J리그1, K리그1 일정을 한국시간으로 제공합니다.</p>
       <div className="mt-7 flex flex-wrap gap-2">{leagues.map(item=><button key={item.key} onClick={()=>setLeague(item.key)} className={`rounded-full px-4 py-2 text-sm font-bold ${league===item.key?"bg-emerald-500 text-slate-950":"border border-slate-700 bg-slate-900 text-slate-300"}`}>{item.label}</button>)}</div>
       <div className="mt-5 flex flex-wrap gap-2"><button onClick={()=>setDate(koreaDate(-1))} className="rounded-lg border border-slate-700 px-4 py-2">어제</button><button onClick={()=>setDate(koreaDate())} className="rounded-lg bg-slate-800 px-4 py-2">오늘</button><button onClick={()=>setDate(koreaDate(1))} className="rounded-lg border border-slate-700 px-4 py-2">내일</button><input type="date" value={date} onChange={event=>setDate(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white" aria-label="경기 날짜"/><span className="self-center pl-2 text-sm text-slate-400">{date} · 한국시간</span></div>
       <div className="mt-8 flex items-end justify-between"><h2 className="text-2xl font-black">축구 경기 일정</h2><span className="text-sm text-slate-400">{loading?"불러오는 중":`${games.length}경기`}</span></div>

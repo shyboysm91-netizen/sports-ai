@@ -12,6 +12,7 @@ const LEAGUES = {
   uel: { name: "UEFA 유로파리그", espn: "uefa.europa" },
   uecl: { name: "UEFA 컨퍼런스리그", espn: "uefa.europa.conf" },
   mls: { name: "미국 MLS", espn: "usa.1" },
+  jleague: { name: "일본 J리그1", espn: "jpn.1" },
   kleague: { name: "K리그1", espn: null },
 } as const;
 
@@ -30,6 +31,7 @@ const KLEAGUE_TEAM_KO: Record<string,string> = {
 Object.assign(TEAM_KO,{"Paris Saint-Germain":"파리 생제르맹","Blackburn Rovers":"블랙번 로버스","Sheffield Wednesday":"셰필드 웬즈데이","Hull City":"헐 시티","Derby County":"더비 카운티","Swansea City":"스완지 시티","AS Monaco":"AS 모나코",Espanyol:"에스파뇰",Watford:"왓퍼드",Wrexham:"렉섬",Portsmouth:"포츠머스",Como:"코모"});
 Object.assign(TEAM_KO,{Deportivo:"데포르티보 라코루냐","Deportivo La Coruña":"데포르티보 라코루냐","Genoa CFC":"제노아",Genoa:"제노아",Fiorentina:"피오렌티나","ACF Fiorentina":"피오렌티나","Las Palmas":"라스팔마스","Real Valladolid":"레알 바야돌리드","FC Andorra":"FC 안도라",Cádiz:"카디스",Cadiz:"카디스",Leganés:"레가네스",Leganes:"레가네스",Burgos:"부르고스",Mirandés:"미란데스",Mirandes:"미란데스",Toulouse:"툴루즈",Elche:"엘체","Real Oviedo":"레알 오비에도","Racing Santander":"라싱 산탄데르"});
 Object.assign(TEAM_KO,{"Atlanta United FC":"애틀랜타 유나이티드","Austin FC":"오스틴 FC","Charlotte FC":"샬럿 FC","Chicago Fire FC":"시카고 파이어","FC Cincinnati":"FC 신시내티","Colorado Rapids":"콜로라도 래피즈","Columbus Crew":"콜럼버스 크루","FC Dallas":"FC 댈러스","D.C. United":"DC 유나이티드","Houston Dynamo FC":"휴스턴 다이너모","Inter Miami CF":"인터 마이애미","LA Galaxy":"LA 갤럭시",LAFC:"로스앤젤레스 FC","Minnesota United FC":"미네소타 유나이티드","CF Montréal":"CF 몬트리올","Nashville SC":"내슈빌 SC","New England Revolution":"뉴잉글랜드 레볼루션","New York City FC":"뉴욕 시티 FC","Red Bull New York":"뉴욕 레드불스","Orlando City SC":"올랜도 시티","Philadelphia Union":"필라델피아 유니언","Portland Timbers":"포틀랜드 팀버스","Real Salt Lake":"레알 솔트레이크","San Diego FC":"샌디에이고 FC","San Jose Earthquakes":"산호세 어스퀘이크스","Seattle Sounders FC":"시애틀 사운더스","Sporting Kansas City":"스포팅 캔자스시티","St. Louis CITY SC":"세인트루이스 시티","Toronto FC":"토론토 FC","Vancouver Whitecaps":"밴쿠버 화이트캡스"});
+Object.assign(TEAM_KO,{"Kashima Antlers":"가시마 앤틀러스","Avispa Fukuoka":"아비스파 후쿠오카","Fagiano Okayama":"파지아노 오카야마","Tokyo Verdy 1969":"도쿄 베르디","Tokyo Verdy":"도쿄 베르디","Cerezo Osaka":"세레소 오사카","Shimizu S-Pulse":"시미즈 에스펄스","Kyoto Sanga":"교토 상가","Mito Hollyhock":"미토 홀리호크","Nagoya Grampus":"나고야 그램퍼스","Gamba Osaka":"감바 오사카","Sanfrecce Hiroshima":"산프레체 히로시마","Kawasaki Frontale":"가와사키 프론탈레","Yokohama F. Marinos":"요코하마 F. 마리노스","Vissel Kobe":"비셀 고베","Urawa Red Diamonds":"우라와 레드 다이아몬즈","Kashiwa Reysol":"가시와 레이솔","FC Tokyo":"FC 도쿄","Machida Zelvia":"마치다 젤비아","Albirex Niigata":"알비렉스 니가타","Shonan Bellmare":"쇼난 벨마레","Yokohama FC":"요코하마 FC","Júbilo Iwata":"주빌로 이와타","Sagan Tosu":"사간 도스"});
 
 function validDate(value: string | null) {
   return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
