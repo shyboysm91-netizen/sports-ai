@@ -53,13 +53,23 @@ export default async function FootballAnalysisPage({ params, searchParams }: Pro
     homeId: text("homeId"), awayId: text("awayId"),
     time: text("time"), venue: text("venue"),
   };
+  const canonical = `https://www.xn--6e0by81a7uc94i.kr/football/analysis/${league}/${date}/${encodeURIComponent(gameId)}/${encodeURIComponent(`${home}-대-${away}`)}`;
+  const description = `${date} ${leagueName} ${home} 대 ${away} 경기입니다. 양 팀 최근 경기와 상대 전적, 주요 변수를 비교합니다.`;
+  const homeTeam = { "@type": "SportsTeam", name: home };
+  const awayTeam = { "@type": "SportsTeam", name: away };
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SportsEvent",
     name: `${home} 대 ${away}`,
     startDate: date,
-    homeTeam: { "@type": "SportsTeam", name: home },
-    awayTeam: { "@type": "SportsTeam", name: away },
+    endDate: date,
+    url: canonical,
+    description,
+    image: ["https://www.xn--6e0by81a7uc94i.kr/opengraph-image"],
+    location: { "@type": "Place", name: text("venue") || `${home} 홈 경기장` },
+    homeTeam,
+    awayTeam,
+    performer: [homeTeam, awayTeam],
     sport: "Soccer",
     eventStatus: "https://schema.org/EventScheduled",
   };

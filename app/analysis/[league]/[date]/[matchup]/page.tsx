@@ -138,6 +138,11 @@ export default async function AnalysisGamePage({
   }
 
   const canonical = cleanCanonical(league, route.date, away, home);
+  const eventDescription = `${date} ${away} 대 ${home} ${leagueLabel(league)} 경기입니다. 양 팀 선발, 최근 경기 흐름과 맞대결 기록을 비교합니다.`;
+  const eventImage = `${canonical}/opengraph-image`;
+  const venue = first(query.venue) || first(query.stadium) || `${home} 홈 경기장`;
+  const homeTeam = { "@type": "SportsTeam", name: home };
+  const awayTeam = { "@type": "SportsTeam", name: away };
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
@@ -146,11 +151,16 @@ export default async function AnalysisGamePage({
         "@id": `${canonical}#event`,
         name: `${away} vs ${home}`,
         startDate: date,
+        endDate: date,
         url: canonical,
+        description: eventDescription,
+        image: [eventImage],
         sport: "Baseball",
         eventStatus: "https://schema.org/EventScheduled",
-        homeTeam: { "@type": "SportsTeam", name: home },
-        awayTeam: { "@type": "SportsTeam", name: away },
+        location: { "@type": "Place", name: venue },
+        homeTeam,
+        awayTeam,
+        performer: [awayTeam, homeTeam],
         organizer: {
           "@type": "Organization",
           name: "장군 AI",
