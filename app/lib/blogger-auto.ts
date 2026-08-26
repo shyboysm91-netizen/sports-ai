@@ -66,9 +66,14 @@ export async function publishBloggerPost(input: {
   labels?: string[];
 }) {
   const duplicate = await findBloggerPost(input.title);
-  if (duplicate) return { skipped: true, id: duplicate.id, url: duplicate.url, title: input.title };
-
   const blogId = required("BLOGGER_BLOG_ID");
+  if (duplicate) {
+    const payload = await bloggerFetch(`/blogs/${blogId}/posts/${duplicate.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ kind: "blogger#post", id: duplicate.id, blog: { id: blogId }, title: input.title, content: input.content, labels: input.labels || ["장군분석", "스포츠 분석"] }),
+    });
+    return { skipped: false, updated: true, id: payload.id, url: payload.url, title: payload.title };
+  }
   const payload = await bloggerFetch(`/blogs/${blogId}/posts/`, {
     method: "POST",
     body: JSON.stringify({
@@ -79,7 +84,7 @@ export async function publishBloggerPost(input: {
       labels: input.labels || ["장군분석", "스포츠 분석"],
     }),
   });
-  return { skipped: false, id: payload.id, url: payload.url, title: payload.title };
+  return { skipped: false, updated: false, id: payload.id, url: payload.url, title: payload.title };
 }
 
 function escapeHtml(value: unknown) {
@@ -124,6 +129,14 @@ function cta() {
 function koreanDate(date: string) {
   const [year, month, day] = date.split("-").map(Number);
   return `${year}년 ${month}월 ${day}일`;
+}
+
+function baseballAnalysisUrl(configKey: string, date: string, game: AnyRow) {
+  const away = String(game.away || "원정팀").trim(), home = String(game.home || "홈팀").trim();
+  const query = new URLSearchParams();
+  const values: Record<string, unknown> = { league: configKey.toUpperCase(), date, gamePk: game.gamePk, time: game.time || game.startTime, away, home, awayTeamId: game.awayTeamId, homeTeamId: game.homeTeamId, stadium: game.stadium || game.venue, awayStarter: game.awayStarter || game.awayPitcher, homeStarter: game.homeStarter || game.homePitcher, awayStarterCode: game.awayStarterCode, homeStarterCode: game.homeStarterCode, awayApiName: game.awayApiName, homeApiName: game.homeApiName, commenceTime: game.commenceTime };
+  for (const [key, value] of Object.entries(values)) if (value !== undefined && value !== null && String(value).trim()) query.set(key, String(value));
+  return `https://www.장군분석.kr/analysis/${configKey}/${encodeURIComponent(date)}/${encodeURIComponent(away)}-vs-${encodeURIComponent(home)}?${query.toString()}`;
 }
 
 export async function makeFootballPosts(origin: string, date: string) {
@@ -173,7 +186,7 @@ export async function makeBaseballPosts(origin: string, date: string) {
     });
     if (!confirmed.length) continue;
     const title = `${koreanDate(date)} ${config.name} 확정 선발 ${confirmed.length}경기 상세 분석`;
-    const cards = confirmed.map((game) => `<section style="background:#fff;color:#17243a;border:1px solid #cfd9e7;border-radius:16px;padding:20px;margin:20px 0"><div style="color:#1268e8;font-weight:800">${escapeHtml(game.time || game.startTime || "경기 시간 확인")}</div><h2>${escapeHtml(game.away)} vs ${escapeHtml(game.home)}</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div style="background:#eef5ff;padding:14px;border-radius:12px"><b>${escapeHtml(game.away)} 선발</b><br>${escapeHtml(game.awayStarter || game.awayPitcher)}</div><div style="background:#eef5ff;padding:14px;border-radius:12px"><b>${escapeHtml(game.home)} 선발</b><br>${escapeHtml(game.homeStarter || game.homePitcher)}</div></div><p>선발투수의 시즌 성적과 상대전적, 최근 등판, 팀 타선과 불펜 소모를 함께 확인해야 합니다. 경기 직전 변경된 선발과 라인업은 아래 상세 분석에서 자동 갱신됩니다.</p><a href="https://www.장군분석.kr/${config.key}" target="_blank" rel="noopener" style="display:inline-block;background:#1167f1;color:#fff;text-decoration:none;padding:12px 18px;border-radius:9px;font-weight:800">이 경기 전체 데이터 보기 →</a></section>`).join("");
+    const cards = confirmed.map((game) => `<section style="background:#fff;color:#17243a;border:1px solid #cfd9e7;border-radius:16px;padding:20px;margin:20px 0"><div style="color:#1268e8;font-weight:800">${escapeHtml(game.time || game.startTime || "경기 시간 확인")}</div><h2>${escapeHtml(game.away)} vs ${escapeHtml(game.home)}</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><div style="background:#eef5ff;padding:14px;border-radius:12px"><b>${escapeHtml(game.away)} 선발</b><br>${escapeHtml(game.awayStarter || game.awayPitcher)}</div><div style="background:#eef5ff;padding:14px;border-radius:12px"><b>${escapeHtml(game.home)} 선발</b><br>${escapeHtml(game.homeStarter || game.homePitcher)}</div></div><p>선발투수의 시즌 성적과 상대전적, 최근 등판, 팀 타선과 불펜 소모를 함께 확인해야 합니다. 경기 직전 변경된 선발과 라인업은 아래 상세 분석에서 자동 갱신됩니다.</p><a href="${escapeHtml(baseballAnalysisUrl(config.key, date, game))}" target="_blank" rel="noopener" style="display:inline-block;background:#1167f1;color:#fff;text-decoration:none;padding:12px 18px;border-radius:9px;font-weight:800">이 경기 전체 데이터 보기 →</a></section>`).join("");
     posts.push({ title, content: header(title, "선발이 공식 발표된 경기만 자동 게시합니다.") + cards, labels: [config.name, "야구", "확정 선발"] });
   }
   return posts;

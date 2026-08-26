@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { MLB_TEAM_KO_BY_ID, MLB_VENUE_KO, playerNameKoAuto } from "../../lib/mlb-ko";
+import { knownPlayerNameKo, MLB_TEAM_KO_BY_ID, MLB_VENUE_KO } from "../../lib/mlb-ko";
+import { persistentPlayerNamesKo } from "../../lib/persistent-player-name";
 
 type MlbTeam = { id?: number; name?: string };
 type MlbPerson = { id?: number; fullName?: string };
@@ -138,11 +139,18 @@ export async function GET(request: Request) {
         });
       }
     }
-    const localizedGames = await Promise.all(games.map(async (game) => ({
+    const playerInputs = games.flatMap((game) => ([
+      { id: game.awayStarterCode, name: game.awayStarter, fixed: knownPlayerNameKo(game.awayStarter, game.awayStarterCode) },
+      { id: game.homeStarterCode, name: game.homeStarter, fixed: knownPlayerNameKo(game.homeStarter, game.homeStarterCode) },
+    ])).filter((player) => player.id && player.name);
+    const localizedNames = await persistentPlayerNamesKo("mlb", playerInputs);
+    const localizedGames = games.map((game) => ({
       ...game,
-      awayStarter: await playerNameKoAuto(game.awayStarter, game.awayStarterCode),
-      homeStarter: await playerNameKoAuto(game.homeStarter, game.homeStarterCode),
-    })));
+      // Never manufacture unreadable Hangul. A new player is shown with the official
+      // English name until the validated ID-based Korean name has been cached.
+      awayStarter: localizedNames.get(game.awayStarterCode) || game.awayStarter,
+      homeStarter: localizedNames.get(game.homeStarterCode) || game.homeStarter,
+    }));
     localizedGames.sort((a, b) => a.commenceTime.localeCompare(b.commenceTime));
     return NextResponse.json({ success: true, source: "MLB Stats API", date, count: localizedGames.length, games: localizedGames });
   } catch (error) {

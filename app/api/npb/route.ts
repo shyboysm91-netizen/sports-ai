@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { playerNameKo, playerNameKoByCode } from "./_shared";
+import { persistentPlayerNamesKo } from "../../lib/persistent-player-name";
 
 const TEAMS: Record<string,string> = {
   "Hanshin":"한신 타이거스","Yomiuri":"요미우리 자이언츠","DeNA":"요코하마 DeNA 베이스타스",
@@ -49,15 +50,19 @@ async function officialStarterNameKo(name: string, playerCode: string) {
     });
     if (response.ok) {
       const html = await response.text();
-      const english = html.match(/id=["']pc_v_name["'][^>]*>([^<]+)</i)?.[1]
-        ?? html.match(/title=["']([^"']+)["'][^>]*>/i)?.[1]
+      const english = html.match(/<li\b[^>]*id=["']pc_v_name["'][^>]*>([^<]+)<\/li>/i)?.[1]
+        ?? html.match(/<title[^>]*>\s*([^<]+?)\s*<\/title>/i)?.[1]
         ?? "";
-      if (english) return playerNameKo(english.replace(/\s*,\s*/g, ", "));
+      if (english) {
+        const playerOnly = decodeHtml(english).split(/[（(]/)[0].split("|")[0].trim().replace(/\s*,\s*/g, ", ");
+        const localized = await persistentPlayerNamesKo("npb", [{ id: playerCode, name: playerOnly, fixed }]);
+        return localized.get(playerCode) || fixed.trim() || playerOnly;
+      }
     }
   } catch {
     // 영문 공식 페이지 장애 시 기존 선수 코드/이름 변환 결과를 사용합니다.
   }
-  return fixed;
+  return fixed.trim() || name.trim();
 }
 
 const KNOWN_OFFICIAL_STARTERS: Record<string, Record<string, OfficialStarter>> = {

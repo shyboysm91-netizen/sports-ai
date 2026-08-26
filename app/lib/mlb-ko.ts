@@ -225,6 +225,10 @@ export function playerNameKoById(name: string, id?: number | string) {
   return MLB_PITCHER_KO_BY_ID[playerId] ?? playerNameKo(name);
 }
 
+export function knownPlayerNameKo(name: string, id?: number | string) {
+  return MLB_PITCHER_KO_BY_ID[Number(id)] ?? CURRENT_MLB_PITCHER_KO[name] ?? PLAYER_NAME_KO[name] ?? "";
+}
+
 export async function playerNameKoAuto(name: string, id?: number | string) {
   if (!name) return "";
   const fixed = MLB_PITCHER_KO_BY_ID[Number(id)];
