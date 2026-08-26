@@ -18,24 +18,22 @@ async function translateWithOpenAI(league: string, players: PlayerNameInput[]) {
   if (!apiKey || !players.length) return new Map<string, string>();
   const apiBase = process.env.OPENAI_API_KEY ? "https://api.openai.com/v1" : "https://ai-gateway.vercel.sh/v1";
   try {
-    const response = await fetch(`${apiBase}/chat/completions`, {
+    const prompt = `다음 ${league.toUpperCase()} 야구 선수의 공식 영문 이름을 한국 스포츠 기사에서 쓰는 자연스러운 한글 표기로 음역하라. 뜻을 번역하지 말고 사람을 바꾸거나 추측하지 마라. JSON은 {"names":{"선수ID":"한글 이름"}} 형식만 반환한다.\n${JSON.stringify(players.map(({ id, name }) => ({ id, name })))}`;
+    const response = await fetch(`${apiBase}/responses`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-4.1-mini",
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: "You transliterate professional baseball player names into standard Korean sports-news spelling. Never translate the meaning. Return JSON only as {\"names\":{\"player-id\":\"Korean name\"}}. Preserve initials naturally and do not invent people." },
-          { role: "user", content: JSON.stringify({ league, players: players.map(({ id, name }) => ({ id, name })) }) },
-        ],
+        model: process.env.OPENAI_MODEL || "gpt-5-mini",
+        input: prompt,
+        text: { format: { type: "json_object" } },
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(15000),
     });
     if (!response.ok) return new Map();
     const payload = await response.json();
-    const parsed = JSON.parse(String(payload?.choices?.[0]?.message?.content ?? "{}"));
+    const outputText = payload?.output_text || payload?.output?.flatMap((item: { content?: Array<{ type?: string; text?: string }> }) => item.content || []).find((item: { type?: string }) => item.type === "output_text")?.text;
+    const parsed = JSON.parse(String(outputText ?? "{}"));
     const result = new Map<string, string>();
     for (const player of players) {
       const localized = String(parsed?.names?.[player.id] ?? "").trim();
