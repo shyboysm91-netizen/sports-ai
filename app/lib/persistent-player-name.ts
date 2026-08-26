@@ -45,6 +45,30 @@ async function translateWithOpenAI(league: string, players: PlayerNameInput[]) {
   }
 }
 
+async function translateWithGoogle(players: PlayerNameInput[]) {
+  const result = new Map<string, string>();
+  // Do not fire 20-30 requests at once. The old implementation was rate-limited
+  // and then fell through to the broken letter-by-letter Hangul generator.
+  for (const player of players) {
+    try {
+      const params = new URLSearchParams({ client: "gtx", sl: "en", tl: "ko", dt: "t", q: player.name });
+      const response = await fetch(`https://translate.googleapis.com/translate_a/single?${params}`, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const localized = Array.isArray(payload?.[0])
+        ? payload[0].map((row: unknown[]) => String(row?.[0] ?? "")).join("").trim()
+        : "";
+      if (validKoreanName(localized)) result.set(player.id, localized);
+    } catch {
+      // The unresolved subset is handled by the AI Gateway below.
+    }
+  }
+  return result;
+}
+
 /**
  * Player IDs are stable while daily schedules are not. New names are converted once,
  * validated, and kept in the shared database for ten years. If conversion is unavailable,
@@ -66,7 +90,10 @@ export async function persistentPlayerNamesKo(league: string, input: PlayerNameI
     else missing.push(player);
   }));
 
-  const translated = await translateWithOpenAI(league, missing);
+  const translated = await translateWithGoogle(missing);
+  const unresolved = missing.filter((player) => !translated.has(player.id));
+  const aiTranslated = await translateWithOpenAI(league, unresolved);
+  for (const [id, name] of aiTranslated) translated.set(id, name);
   await Promise.all(missing.map(async (player) => {
     const localized = translated.get(player.id);
     if (!localized) return;
