@@ -209,6 +209,9 @@ export function teamNameKo(name: string, id?: number) {
 
 export function playerNameKo(name: string) {
   if (!name) return "";
+  // API에서 이미 검증된 한국어 이름을 내려준 경우 다시 영문 음역기에
+  // 통과시키면 한글 음절이 분해되어 이름이 망가진다.
+  if (/[가-힣]/.test(name) && !/[A-Za-z]/.test(name)) return name;
   if (CURRENT_MLB_PITCHER_KO[name]) return CURRENT_MLB_PITCHER_KO[name];
   if (PLAYER_NAME_KO[name]) return PLAYER_NAME_KO[name];
   const parts = name.replace(/\./g, "").split(/\s+/).filter(Boolean);

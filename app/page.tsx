@@ -40,7 +40,10 @@ type GamesResponse = {
 
 function starterDisplayName(league: League, name: string) {
   if (!name) return "미정";
-  if (league === "MLB") return mlbPlayerNameKo(name) || name;
+  if (league === "MLB") {
+    if (/[가-힣]/.test(name) && !/[A-Za-z]/.test(name)) return name;
+    return mlbPlayerNameKo(name) || name;
+  }
   if (league === "NPB") {
     // /api/npb가 이미 한국어로 변환한 이름은 다시 로마자 변환 함수에 넣으면
     // 빈 문자열이 되어 카드에는 `선발`만 남습니다. 한국어 이름은 그대로 표시하고,
