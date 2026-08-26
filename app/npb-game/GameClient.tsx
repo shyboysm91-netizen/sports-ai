@@ -728,7 +728,7 @@ function Content() {
           signal: controller.signal,
         };
 
-        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&awayStarterCode=${encodeURIComponent(awayStarterCode)}&homeStarterCode=${encodeURIComponent(homeStarterCode)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=14&h2hVersion=5`;
+        const analysisBase = `/api/npb/analysis?away=${encodeURIComponent(away)}&home=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&awayStarter=${encodeURIComponent(awayStarter)}&homeStarter=${encodeURIComponent(homeStarter)}&awayStarterCode=${encodeURIComponent(awayStarterCode)}&homeStarterCode=${encodeURIComponent(homeStarterCode)}&stadium=${encodeURIComponent(stadium)}&npbPitcherFix=15&historyVersion=4&h2hVersion=5`;
         const [analysisResponse, marketResponse, weatherResponse, scheduleResponse] =
           await Promise.all([
             fetch(dataCacheUrl(`${analysisBase}&fast=1`, 300), baseOptions),
@@ -872,7 +872,8 @@ function Content() {
       homeStarter: resolvedHomeStarter,
       awayStarterCode: String(scheduledGame?.awayStarterCode || awayStarterCode || ""),
       homeStarterCode: String(scheduledGame?.homeStarterCode || homeStarterCode || ""),
-      npbPitcherFix: "14",
+      npbPitcherFix: "15",
+      historyVersion: "4",
       h2hVersion: "5",
     });
     fetch(dataCacheUrl(`/api/npb/analysis?${params.toString()}`, 60), {

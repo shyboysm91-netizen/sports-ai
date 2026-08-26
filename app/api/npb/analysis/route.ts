@@ -166,8 +166,8 @@ export async function GET(req:Request){
   const [awayDetail,homeDetail]=fast
     ? [null,null]
     : await Promise.all([
-        awayBase&&awayBase.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}&playerCode=${encodeURIComponent(awayStarterCode||awayBase.playerCode||"")}`):Promise.resolve(null),
-        homeBase&&homeBase.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}&playerCode=${encodeURIComponent(homeStarterCode||homeBase.playerCode||"")}`):Promise.resolve(null),
+        awayBase&&awayBase.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(away)}&opponent=${encodeURIComponent(home)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(awayBase.name||"")}&originalName=${encodeURIComponent(awayBase.originalName||awayBase.name||"")}&playerCode=${encodeURIComponent(awayStarterCode||awayBase.playerCode||"")}&lookback=140&historyVersion=4`):Promise.resolve(null),
+        homeBase&&homeBase.dataAvailable!==false?json(u.origin,`/api/npb/pitcher-detail?team=${encodeURIComponent(home)}&opponent=${encodeURIComponent(away)}&date=${encodeURIComponent(date)}&stadium=${encodeURIComponent(stadium)}&name=${encodeURIComponent(homeBase.name||"")}&originalName=${encodeURIComponent(homeBase.originalName||homeBase.name||"")}&playerCode=${encodeURIComponent(homeStarterCode||homeBase.playerCode||"")}&lookback=140&historyVersion=4`):Promise.resolve(null),
       ]);
 
   const a:Standing|undefined=standings.standings?.find((x:Standing)=>x.team===away);
