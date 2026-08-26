@@ -784,7 +784,9 @@ function Content() {
     if (!targets.length) return;
 
     Promise.all(targets.map(async (pitcher: any) => {
-      const url = `/api/npb/pitcher-detail?team=${encodeURIComponent(pitcher.team)}&opponent=${encodeURIComponent(pitcher.opponent)}&date=${encodeURIComponent(date)}&name=${encodeURIComponent(pitcher.name)}&originalName=${encodeURIComponent(pitcher.originalName || pitcher.name)}&playerCode=${encodeURIComponent(pitcher.playerCode || "")}&lookback=21&bullpenVersion=2`;
+      // 선발은 보통 주 1회 등판하므로 21일만 조회하면 1~3경기만 나온다.
+      // 시즌 중 충분한 범위에서 실제 등판을 찾아 최대 최근 10경기를 채운다.
+      const url = `/api/npb/pitcher-detail?team=${encodeURIComponent(pitcher.team)}&opponent=${encodeURIComponent(pitcher.opponent)}&date=${encodeURIComponent(date)}&name=${encodeURIComponent(pitcher.name)}&originalName=${encodeURIComponent(pitcher.originalName || pitcher.name)}&playerCode=${encodeURIComponent(pitcher.playerCode || "")}&lookback=140&historyVersion=3`;
       try {
         const response = await fetch(dataCacheUrl(url, 1800), { signal: controller.signal });
         const detail = await response.json();
